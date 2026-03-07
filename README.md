@@ -159,5 +159,10 @@ python -m pytest tests/ -v
 
 ## License
 
-GNU Affero General Public License v3.0 (AGPL-3.0) — see [LICENSE](LICENSE).
+ShipsAhoy is dual-licensed:
+
+- Open-source license: GNU Affero General Public License v3.0 (`AGPL-3.0`) for community/open-source use. See [LICENSE](LICENSE).
+- Commercial license: If you want to use ShipsAhoy in a commercial/proprietary product without AGPL obligations, contact the author for a paid commercial license. See [LICENSE-COMMERCIAL.md](LICENSE-COMMERCIAL.md).
+
+Commercial use is not permitted under separate proprietary terms unless you obtain a commercial license from the copyright holder.
 
