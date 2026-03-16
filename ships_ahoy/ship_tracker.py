@@ -41,6 +41,8 @@ class ShipInfo:
     course: Optional[float] = None      # course over ground in degrees
     ship_type: Optional[int] = None     # AIS numeric ship-type code
     status: Optional[int] = None        # AIS navigation status code
+    destination: Optional[str] = None  # port of destination from AIS type-5
+    flag: Optional[str] = None         # country flag code from AIS type-24
     last_seen: datetime = field(default_factory=datetime.now)
 
     @property

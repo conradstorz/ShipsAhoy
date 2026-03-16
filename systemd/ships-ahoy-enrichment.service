@@ -1,0 +1,15 @@
+[Unit]
+Description=ShipsAhoy Enrichment Service
+After=network.target
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/ShipsAhoy
+ExecStart=uv run python services/enrichment_service.py --db /home/pi/ShipsAhoy/ships.db --photos-dir /home/pi/ShipsAhoy/static/photos
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=ships-ahoy.target

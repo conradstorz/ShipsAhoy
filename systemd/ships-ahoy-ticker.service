@@ -1,0 +1,17 @@
+[Unit]
+Description=ShipsAhoy LED Ticker
+# After= is a startup ordering hint only, not BindsTo.
+# The ticker can run independently once ships.db exists.
+After=ships-ahoy-ais.service
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/ShipsAhoy
+ExecStart=uv run python services/ticker_service.py --db /home/pi/ShipsAhoy/ships.db
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=ships-ahoy.target

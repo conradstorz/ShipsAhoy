@@ -1,0 +1,6 @@
+[Unit]
+Description=ShipsAhoy All Services
+Wants=ships-ahoy-ais.service ships-ahoy-ticker.service ships-ahoy-enrichment.service ships-ahoy-web.service
+
+[Install]
+WantedBy=multi-user.target

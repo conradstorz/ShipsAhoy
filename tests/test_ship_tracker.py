@@ -51,6 +51,22 @@ class TestShipInfo:
         after = datetime.now()
         assert before <= ship.last_seen <= after
 
+    def test_ship_info_has_destination_field(self):
+        ship = ShipInfo(mmsi=123456789)
+        assert ship.destination is None
+
+    def test_ship_info_has_flag_field(self):
+        ship = ShipInfo(mmsi=123456789)
+        assert ship.flag is None
+
+    def test_ship_info_destination_can_be_set(self):
+        ship = ShipInfo(mmsi=123456789, destination="ROTTERDAM")
+        assert ship.destination == "ROTTERDAM"
+
+    def test_ship_info_flag_can_be_set(self):
+        ship = ShipInfo(mmsi=123456789, flag="NL")
+        assert ship.flag == "NL"
+
 
 # ---------------------------------------------------------------------------
 # ShipTracker — initial state
