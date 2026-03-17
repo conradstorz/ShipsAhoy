@@ -168,14 +168,32 @@ def settings_get():
 def settings_post():
     """Save submitted settings values and redirect to GET /settings."""
     cfg = _get_cfg()
-    keys = [
+    # Numeric keys validated before writing — a bad value here would crash services
+    # on their next config read (float()/int() would raise ValueError).
+    float_keys = [
         "home_lat", "home_lon", "distance_km", "scroll_speed_px_per_sec",
-        "stale_ship_hours", "enrichment_delay_sec", "enrichment_max_attempts",
+        "stale_ship_hours", "enrichment_delay_sec",
     ]
-    for key in keys:
+    int_keys = ["enrichment_max_attempts"]
+
+    for key in float_keys:
         value = request.form.get(key, "").strip()
         if value:
-            cfg.set(key, value)
+            try:
+                float(value)  # validate before storing
+                cfg.set(key, value)
+            except ValueError:
+                logger.warning("Settings: invalid float for %s: %r — ignored", key, value)
+
+    for key in int_keys:
+        value = request.form.get(key, "").strip()
+        if value:
+            try:
+                int(value)  # validate before storing
+                cfg.set(key, value)
+            except ValueError:
+                logger.warning("Settings: invalid int for %s: %r — ignored", key, value)
+
     return redirect(url_for("settings_get"))
 
 
@@ -203,7 +221,10 @@ def main() -> None:
     _cfg = Config(_conn)
 
     logger.info("Web service starting on port %d", args.port)
-    app.run(host="0.0.0.0", port=args.port, debug=False)
+    # threaded=False enforces single-thread access to the module-level SQLite
+    # connection. SQLite connections must not be shared across threads.
+    # For multi-worker deployments, open a per-request connection instead.
+    app.run(host="0.0.0.0", port=args.port, debug=False, threaded=False)
 
 
 if __name__ == "__main__":

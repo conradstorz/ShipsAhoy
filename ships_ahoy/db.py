@@ -198,30 +198,46 @@ def save_enrichment(conn: sqlite3.Connection, mmsi: int, data: dict) -> None:
     """
     from datetime import datetime
 
-    allowed = {
+    # Only these column names are ever written — defined as a tuple of literals
+    # so the SQL template is built from a fixed, auditable set, never from caller input.
+    _ALLOWED_COLS = (
         "vessel_name", "imo", "call_sign", "flag", "ship_type_label",
         "length_m", "build_year", "owner", "photo_url", "photo_path", "source",
-    }
-    fields = {k: v for k, v in data.items() if k in allowed}
+    )
+    fields = {k: v for k, v in data.items() if k in _ALLOWED_COLS}
     fields["fetched_at"] = datetime.now().isoformat()
+
+    # Build SQL from the fixed literal column set — no caller-controlled strings in template
+    col_names = list(fields.keys())
+    placeholders = ", ".join("?" * len(col_names))
+    values = list(fields.values())
 
     existing = conn.execute("SELECT mmsi FROM enrichment WHERE mmsi=?", (mmsi,)).fetchone()
     if existing:
-        set_clause = ", ".join(f"{k}=?" for k in fields)
+        set_clause = ", ".join(f"{c}=?" for c in col_names)
         conn.execute(
-            f"UPDATE enrichment SET {set_clause} WHERE mmsi=?",
-            (*fields.values(), mmsi),
+            f"UPDATE enrichment SET {set_clause} WHERE mmsi=?",  # noqa: S608
+            (*values, mmsi),
         )
     else:
-        cols = ["mmsi"] + list(fields.keys())
-        placeholders = ", ".join("?" for _ in cols)
+        col_list = ", ".join(["mmsi"] + col_names)
         conn.execute(
-            f"INSERT INTO enrichment ({', '.join(cols)}) VALUES ({placeholders})",
-            (mmsi, *fields.values()),
+            f"INSERT INTO enrichment ({col_list}) VALUES (?, {placeholders})",  # noqa: S608
+            (mmsi, *values),
         )
 
     conn.execute("UPDATE ships SET enriched=TRUE WHERE mmsi=?", (mmsi,))
     conn.commit()
+
+
+def _write_event_sql(conn: sqlite3.Connection, mmsi: int, event_type: str, detail: str) -> None:
+    """Execute the INSERT for an event row without committing."""
+    from datetime import datetime
+
+    conn.execute(
+        "INSERT INTO events (mmsi, event_type, detail, created_at) VALUES (?, ?, ?, ?)",
+        (mmsi, event_type, detail, datetime.now().isoformat()),
+    )
 
 
 def write_event(
@@ -231,12 +247,7 @@ def write_event(
     detail: str,
 ) -> None:
     """Append a new event row with created_at=now() and displayed_at=NULL."""
-    from datetime import datetime
-
-    conn.execute(
-        "INSERT INTO events (mmsi, event_type, detail, created_at) VALUES (?, ?, ?, ?)",
-        (mmsi, event_type, detail, datetime.now().isoformat()),
-    )
+    _write_event_sql(conn, mmsi, event_type, detail)
     conn.commit()
 
 
@@ -308,8 +319,8 @@ def record_visit(conn: sqlite3.Connection, mmsi: int) -> None:
     conn.commit()
 
 
-def close_visit(conn: sqlite3.Connection, mmsi: int) -> None:
-    """Set departed_at=now() on the most recent open visit row for *mmsi*."""
+def _close_visit_sql(conn: sqlite3.Connection, mmsi: int) -> None:
+    """Execute the UPDATE for closing the most recent open visit without committing."""
     from datetime import datetime
 
     conn.execute(
@@ -323,14 +334,40 @@ def close_visit(conn: sqlite3.Connection, mmsi: int) -> None:
         """,
         (datetime.now().isoformat(), mmsi),
     )
+
+
+def close_visit(conn: sqlite3.Connection, mmsi: int) -> None:
+    """Set departed_at=now() on the most recent open visit row for *mmsi*."""
+    _close_visit_sql(conn, mmsi)
     conn.commit()
 
 
 def mark_ship_departed(conn: sqlite3.Connection, mmsi: int) -> None:
-    """Write a DEPARTED event, close the open visit, and log the departure.
+    """Write a DEPARTED event and close the open visit in one atomic transaction.
 
     Does NOT delete the ships row — history is preserved permanently.
-    Calls write_event() and close_visit() atomically within one transaction.
     """
-    write_event(conn, mmsi, "DEPARTED", f"Ship {mmsi} departed")
-    close_visit(conn, mmsi)
+    _write_event_sql(conn, mmsi, "DEPARTED", f"Ship {mmsi} departed")
+    _close_visit_sql(conn, mmsi)
+    conn.commit()
+
+
+def increment_fetch_attempts(conn: sqlite3.Connection, mmsi: int) -> None:
+    """Increment fetch_attempts for a ship's enrichment row without marking it enriched.
+
+    Creates the enrichment row if it does not exist. Use this on scrape failures
+    instead of save_enrichment() to avoid prematurely setting enriched=TRUE.
+    """
+    existing = conn.execute(
+        "SELECT mmsi FROM enrichment WHERE mmsi=?", (mmsi,)
+    ).fetchone()
+    if existing:
+        conn.execute(
+            "UPDATE enrichment SET fetch_attempts = fetch_attempts + 1 WHERE mmsi=?",
+            (mmsi,),
+        )
+    else:
+        conn.execute(
+            "INSERT INTO enrichment (mmsi, fetch_attempts) VALUES (?, 1)", (mmsi,)
+        )
+    conn.commit()

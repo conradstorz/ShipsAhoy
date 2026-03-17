@@ -36,7 +36,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from ships_ahoy.config import Config
-from ships_ahoy.db import init_db, get_unenriched_ships, save_enrichment, write_event
+from ships_ahoy.db import init_db, get_unenriched_ships, increment_fetch_attempts, save_enrichment, write_event
 from ships_ahoy.events import EventType
 
 logger = logging.getLogger(__name__)
@@ -119,9 +119,10 @@ def _scrape_marinetraffic(mmsi: int) -> Optional[dict]:
     """
     url = f"https://www.marinetraffic.com/en/ais/details/ships/mmsi:{mmsi}"
     resp = requests.get(url, timeout=_TIMEOUT, headers=_HEADERS)
-    resp.raise_for_status()
+    resp.raise_for_status()  # raises on 4xx/5xx including 403
 
-    if resp.status_code == 403 or "cloudflare" in resp.text.lower():
+    # raise_for_status() won't catch Cloudflare challenge pages (200 with JS wall)
+    if "cloudflare" in resp.text.lower():
         return None
 
     soup = BeautifulSoup(resp.text, "html.parser")
@@ -250,7 +251,7 @@ def main() -> None:
                                     f"New enrichment data for MMSI {mmsi}")
                         logger.info("Enriched MMSI %d from %s", mmsi, data.get("source"))
                     else:
-                        save_enrichment(conn, mmsi, {})
+                        increment_fetch_attempts(conn, mmsi)
                         logger.debug("No data found for MMSI %d", mmsi)
                 except Exception:
                     logger.exception("Error enriching MMSI %d", mmsi)

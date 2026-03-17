@@ -223,6 +223,45 @@ class TestShipTrackerUpdate:
         assert ship is not None
         assert ship.mmsi == 999999999
 
+    # Fix 4: destination and flag population
+    def test_update_populates_destination_from_msg(self):
+        """AIS type-5 messages carry a destination field."""
+        tracker = ShipTracker()
+        msg = _make_msg(mmsi=123000001, destination="ROTTERDAM    ")
+        ship = tracker.update(msg)
+        assert ship.destination == "ROTTERDAM"
+
+    def test_update_ignores_empty_destination(self):
+        tracker = ShipTracker()
+        msg = _make_msg(mmsi=123000002, destination="         ")
+        ship = tracker.update(msg)
+        assert ship.destination is None
+
+    def test_update_populates_flag_from_mmsi(self):
+        """Flag (country code) is derived from the MID prefix of the MMSI.
+        MMSI 338xxxxxx → MID 338 → United States → 'US'
+        """
+        tracker = ShipTracker()
+        msg = _make_msg(mmsi=338000001)
+        ship = tracker.update(msg)
+        assert ship.flag == "US"
+
+    def test_update_populates_flag_for_uk_mmsi(self):
+        """MMSI 232xxxxxx → MID 232 → United Kingdom → 'GB'"""
+        tracker = ShipTracker()
+        msg = _make_msg(mmsi=232000001)
+        ship = tracker.update(msg)
+        assert ship.flag == "GB"
+
+    def test_update_flag_not_overwritten_by_subsequent_messages(self):
+        """Once flag is set from MMSI, it should remain consistent."""
+        tracker = ShipTracker()
+        msg1 = _make_msg(mmsi=232000002)
+        msg2 = _make_msg(mmsi=232000002, lat=51.5, lon=-0.1)
+        tracker.update(msg1)
+        ship = tracker.update(msg2)
+        assert ship.flag == "GB"
+
 
 # ---------------------------------------------------------------------------
 # Integration: real pyais decoded messages

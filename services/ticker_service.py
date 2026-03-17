@@ -61,12 +61,13 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _handle_overflow(conn, events, driver) -> None:
+def _handle_overflow(conn, events, driver, cfg: Config) -> None:
     """Flush stale events and display a summary message.
 
     Called when more than OVERFLOW_THRESHOLD events are pending.
-    Marks all pending events as displayed without scrolling them individually,
-    then scrolls a single summary.
+    Marks events older than OVERFLOW_AGE_MINUTES as displayed without scrolling,
+    then scrolls a single summary. If no events are old enough to flush,
+    displays the oldest one normally to avoid a spin loop.
     """
     cutoff = (datetime.now() - timedelta(minutes=OVERFLOW_AGE_MINUTES)).isoformat()
     flushed = 0
@@ -77,8 +78,11 @@ def _handle_overflow(conn, events, driver) -> None:
 
     if flushed > 0:
         msg = f"ShipsAhoy — {flushed} new events (queue flushed)"
-        driver.scroll_text(msg, speed_px_per_sec=40)
+        driver.scroll_text(msg, speed_px_per_sec=cfg.scroll_speed)
         logger.info("Overflow: flushed %d stale events", flushed)
+    else:
+        # All events are recent — display the oldest one to drain the queue
+        _display_event(conn, events[0], driver, cfg)
 
 
 def _display_event(conn, event_row, driver, cfg: Config) -> None:
@@ -131,7 +135,7 @@ def main() -> None:
             # Overflow check: total pending count is the gate; age determines what gets flushed.
             # Spec: "if more than 10 events are pending, events older than 5 minutes are skipped"
             if len(events) > OVERFLOW_THRESHOLD:
-                _handle_overflow(conn, events, driver)
+                _handle_overflow(conn, events, driver, cfg)
                 continue
 
             # Display one event per loop iteration

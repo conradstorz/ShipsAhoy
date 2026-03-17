@@ -81,10 +81,20 @@ def _connect_with_backoff(host: str, port: int, use_udp: bool) -> AISReceiver:
 
 
 def _run_stale_sweep(conn, cfg: Config) -> None:
-    """Query for ships past stale_ship_hours and mark each as departed."""
+    """Query for ships past stale_ship_hours that still have an open visit, and mark each departed.
+
+    The JOIN on ship_visits WHERE departed_at IS NULL ensures ships already marked
+    as departed are never processed twice, preventing duplicate DEPARTED events.
+    """
     threshold = datetime.now() - timedelta(hours=cfg.stale_ship_hours)
     rows = conn.execute(
-        "SELECT mmsi FROM ships WHERE last_seen < ?", (threshold.isoformat(),)
+        """
+        SELECT DISTINCT s.mmsi FROM ships s
+        JOIN ship_visits sv ON s.mmsi = sv.mmsi
+        WHERE s.last_seen < ?
+          AND sv.departed_at IS NULL
+        """,
+        (threshold.isoformat(),),
     ).fetchall()
     for row in rows:
         try:

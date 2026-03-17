@@ -12,6 +12,7 @@ from ships_ahoy.db import (
     get_enrichment,
     get_unenriched_ships,
     save_enrichment,
+    increment_fetch_attempts,
     write_event,
     get_pending_events,
     get_recent_events,
@@ -401,3 +402,89 @@ def test_get_ships_in_range_excludes_ships_without_position(conn):
     result = get_ships_in_range(conn, home_lat=51.5, home_lon=-0.1, km=50.0)
     mmsis = [r["mmsi"] for r in result]
     assert 800000003 not in mmsis
+
+
+# ---------------------------------------------------------------------------
+# Fix 1: mark_ship_departed atomicity
+# ---------------------------------------------------------------------------
+
+def test_mark_ship_departed_both_effects_visible_together(conn):
+    """DEPARTED event and closed visit must both be committed by the same call.
+
+    After mark_ship_departed returns, both side effects are present.
+    If they were committed separately, a crash between the two commits would
+    leave one but not the other — this test verifies the happy path;
+    the structural fix (single conn.commit() in mark_ship_departed) prevents the
+    partial-commit failure mode.
+    """
+    ship = ShipInfo(mmsi=900000001, name="ATOMIC TEST")
+    upsert_ship(conn, ship)
+    record_visit(conn, 900000001)
+    mark_ship_departed(conn, 900000001)
+
+    event = conn.execute(
+        "SELECT id FROM events WHERE mmsi=900000001 AND event_type='DEPARTED'"
+    ).fetchone()
+    visit = conn.execute(
+        "SELECT departed_at FROM ship_visits WHERE mmsi=900000001"
+    ).fetchone()
+
+    assert event is not None, "DEPARTED event must be present"
+    assert visit["departed_at"] is not None, "visit must be closed"
+
+
+# ---------------------------------------------------------------------------
+# Fix 3: increment_fetch_attempts
+# ---------------------------------------------------------------------------
+
+def test_increment_fetch_attempts_creates_row_on_first_call(conn):
+    ship = ShipInfo(mmsi=910000001)
+    upsert_ship(conn, ship)
+    increment_fetch_attempts(conn, 910000001)
+    row = conn.execute(
+        "SELECT fetch_attempts FROM enrichment WHERE mmsi=910000001"
+    ).fetchone()
+    assert row is not None
+    assert row["fetch_attempts"] == 1
+
+
+def test_increment_fetch_attempts_increments_on_subsequent_calls(conn):
+    ship = ShipInfo(mmsi=910000002)
+    upsert_ship(conn, ship)
+    increment_fetch_attempts(conn, 910000002)
+    increment_fetch_attempts(conn, 910000002)
+    row = conn.execute(
+        "SELECT fetch_attempts FROM enrichment WHERE mmsi=910000002"
+    ).fetchone()
+    assert row["fetch_attempts"] == 2
+
+
+def test_increment_fetch_attempts_does_not_set_enriched(conn):
+    ship = ShipInfo(mmsi=910000003)
+    upsert_ship(conn, ship)
+    increment_fetch_attempts(conn, 910000003)
+    row = conn.execute(
+        "SELECT enriched FROM ships WHERE mmsi=910000003"
+    ).fetchone()
+    assert not row["enriched"]
+
+
+def test_get_unenriched_ships_excludes_after_max_attempts_via_increment(conn):
+    """Ships that fail max_attempts times via increment_fetch_attempts are excluded."""
+    ship = ShipInfo(mmsi=910000004)
+    upsert_ship(conn, ship)
+    for _ in range(3):
+        increment_fetch_attempts(conn, 910000004)
+    result = get_unenriched_ships(conn, max_attempts=3)
+    assert 910000004 not in result
+
+
+def test_failed_enrichment_does_not_mark_ship_enriched(conn):
+    """Calling increment_fetch_attempts instead of save_enrichment({}) on failure
+    leaves enriched=FALSE so the ship remains eligible for future attempts."""
+    ship = ShipInfo(mmsi=910000005)
+    upsert_ship(conn, ship)
+    increment_fetch_attempts(conn, 910000005)
+    increment_fetch_attempts(conn, 910000005)
+    result = get_unenriched_ships(conn, max_attempts=3)
+    assert 910000005 in result  # still eligible (only 2 of 3 attempts used)
