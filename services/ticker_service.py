@@ -37,6 +37,7 @@ from ships_ahoy.db import (
     batch_mark_events_displayed,
     count_ships,
     get_ships_in_range,
+    write_display_state,   # NEW
 )
 from ships_ahoy.events import format_ticker_message
 from ships_ahoy.service_utils import DEFAULT_DB_PATH, configure_logging
@@ -60,6 +61,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--db", default=DEFAULT_DB_PATH, metavar="PATH")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--esp32-port", default=None, metavar="PORT",
+                        help="UART device for ESP32, e.g. /dev/ttyAMA0")
     return parser
 
 
@@ -79,6 +82,8 @@ def _handle_overflow(conn, events, driver, cfg: Config) -> None:
         batch_mark_events_displayed(conn, stale_ids)
         msg = f"ShipsAhoy — {flushed} new events (queue flushed)"
         driver.scroll_text(msg, speed_px_per_sec=cfg.scroll_speed)
+        write_display_state(conn, text=msg, speed=cfg.scroll_speed,
+                            mode="scroll", duration_ms=0)
         logger.info("Overflow: flushed %d stale events", flushed)
     else:
         # All events are recent — display the oldest one to drain the queue
@@ -94,6 +99,8 @@ def _display_event(conn, event_row, driver, cfg: Config) -> None:
     enrichment_row = get_enrichment(conn, event_row["mmsi"])
     text = format_ticker_message(event_row, ship_row, enrichment_row)
     driver.scroll_text(text, speed_px_per_sec=cfg.scroll_speed)
+    write_display_state(conn, text=text, speed=cfg.scroll_speed,
+                        mode="scroll", duration_ms=0)
     mark_event_displayed(conn, event_row["id"])
 
 
@@ -106,6 +113,8 @@ def _show_idle(conn, driver, cfg: Config) -> None:
         count = count_ships(conn)
     msg = f"ShipsAhoy — {count} ships nearby"
     driver.show_static(msg, duration_sec=POLL_INTERVAL_SEC)
+    write_display_state(conn, text=msg, speed=0.0,
+                        mode="static", duration_ms=int(POLL_INTERVAL_SEC * 1000))
 
 
 def main() -> None:
@@ -115,7 +124,13 @@ def main() -> None:
 
     conn = init_db(args.db)
     cfg = Config(conn)
-    driver = _DriverClass()
+
+    if args.esp32_port:
+        from ships_ahoy.matrix_driver import ESP32Driver
+        driver = ESP32Driver(port=args.esp32_port)
+        logger.info("Using ESP32Driver on %s", args.esp32_port)
+    else:
+        driver = _DriverClass()
 
     logger.info("Ticker service starting.")
 
@@ -128,13 +143,10 @@ def main() -> None:
                 time.sleep(POLL_INTERVAL_SEC)
                 continue
 
-            # Overflow check: total pending count is the gate; age determines what gets flushed.
-            # Spec: "if more than 10 events are pending, events older than 5 minutes are skipped"
             if len(events) > OVERFLOW_THRESHOLD:
                 _handle_overflow(conn, events, driver, cfg)
                 continue
 
-            # Display one event per loop iteration
             _display_event(conn, events[0], driver, cfg)
 
         except KeyboardInterrupt:
