@@ -176,7 +176,7 @@ def ticker_preview():
                     if row and row["updated_at"] != last_updated_at:
                         last_updated_at = row["updated_at"]
                         if row["mode"] == "scroll":
-                            preview.scroll_text(row["text"] or "", row["speed"] or 40.0)
+                            preview.scroll_text(row["text"] or "", speed_px_per_sec=row["speed"] or 40.0)
                         else:
                             preview.show_static(
                                 row["text"] or "",
@@ -190,7 +190,7 @@ def ticker_preview():
                 frame = preview.get_current_frame(elapsed_sec=elapsed)
 
                 # Flatten row-major and emit
-                flat = [list(px) for row in frame for px in row]
+                flat = [list(px) for pixel_row in frame for px in pixel_row]
                 data = json.dumps({
                     "pixels": flat,
                     "width": ESP32_DISPLAY_WIDTH,
