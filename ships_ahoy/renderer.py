@@ -137,7 +137,7 @@ class BitmapFont:
         """Return the 5 column bytes for *ch* (blank if out of range)."""
         code = ord(ch)
         if 32 <= code <= 126:
-            return _FONT_DATA[code - 32]
+            return list(_FONT_DATA[code - 32])
         return [0] * _GLYPH_W
 
 
@@ -203,7 +203,6 @@ def scroll_frame(
         return [[_BLACK] * display_width]
 
     total_width = len(pixels[0])
-    height = len(pixels)
     frame: PixelGrid = []
     for row in pixels:
         frame_row: list[RGB] = []
