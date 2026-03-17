@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ShipsAhoy — Ticker Preview</title>
+    <style>
+        body { background: #111; color: #ccc; font-family: monospace; padding: 1rem; }
+        h1 { font-size: 1rem; margin-bottom: 0.5rem; }
+        canvas {
+            display: block;
+            image-rendering: pixelated;
+            border: 1px solid #333;
+        }
+        #status { margin-top: 0.5rem; font-size: 0.75rem; color: #666; }
+    </style>
+</head>
+<body>
+    <h1>Ticker Preview (live)</h1>
+    <!--
+        Each LED is drawn as a 3x3 px rectangle with a 1 px gap → 4 px pitch.
+        Canvas: width*4 - 1 wide, height*4 - 1 tall.
+        600 cols × 4 - 1 = 2399 px wide
+         32 rows × 4 - 1 = 127  px tall
+    -->
+    <canvas id="ticker"></canvas>
+    <div id="status">Connecting…</div>
+
+    <script>
+        const LED_PITCH = 4;    // pixels per LED (3 px rectangle + 1 px gap)
+        const LED_SIZE  = 3;    // drawn rectangle size in px
+
+        const canvas = document.getElementById('ticker');
+        const ctx    = canvas.getContext('2d');
+        const status = document.getElementById('status');
+
+        let displayWidth  = 600;
+        let displayHeight = 32;
+        let initialized   = false;
+
+        function initCanvas(w, h) {
+            displayWidth  = w;
+            displayHeight = h;
+            canvas.width  = w * LED_PITCH - 1;
+            canvas.height = h * LED_PITCH - 1;
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            initialized = true;
+        }
+
+        function drawFrame(pixels, w, h) {
+            if (!initialized || w !== displayWidth || h !== displayHeight) {
+                initCanvas(w, h);
+            }
+            let i = 0;
+            for (let row = 0; row < h; row++) {
+                for (let col = 0; col < w; col++) {
+                    const [r, g, b] = pixels[i++];
+                    ctx.fillStyle = `rgb(${r},${g},${b})`;
+                    ctx.fillRect(
+                        col * LED_PITCH,
+                        row * LED_PITCH,
+                        LED_SIZE,
+                        LED_SIZE,
+                    );
+                }
+            }
+        }
+
+        function connect() {
+            const es = new EventSource('/ticker/preview');
+
+            es.onopen = () => {
+                status.textContent = 'Connected — streaming at ~30 FPS';
+            };
+
+            es.onmessage = (evt) => {
+                try {
+                    const { pixels, width, height } = JSON.parse(evt.data);
+                    drawFrame(pixels, width, height);
+                } catch (e) {
+                    console.error('Frame parse error', e);
+                }
+            };
+
+            es.onerror = () => {
+                status.textContent = 'Disconnected — reconnecting…';
+                es.close();
+                setTimeout(connect, 3000);
+            };
+        }
+
+        initCanvas(displayWidth, displayHeight);
+        connect();
+    </script>
+</body>
+</html>

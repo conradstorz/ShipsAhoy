@@ -213,6 +213,12 @@ def ticker_preview():
     )
 
 
+@app.route("/ticker")
+def ticker_page():
+    """Ticker live preview page."""
+    return render_template("ticker_preview.html")
+
+
 @app.route("/settings", methods=["GET"])
 def settings_get():
     """Settings form pre-populated from the settings table."""
