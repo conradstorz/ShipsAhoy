@@ -2,11 +2,73 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>ShipsAhoy — Ship Detail</title>
+  <title>ShipsAhoy — {{ ship.name }}</title>
+  <style>
+    body { font-family: monospace; max-width: 900px; margin: 2em auto; }
+    table { border-collapse: collapse; margin-bottom: 1.5em; }
+    th, td { border: 1px solid #ccc; padding: 0.4em 0.8em; text-align: left; }
+    th { background: #eee; width: 200px; }
+    img { max-width: 400px; margin: 1em 0; display: block; }
+    h2 { margin-top: 1.5em; }
+  </style>
 </head>
 <body>
-  <h1>Ship Detail</h1>
-  <p>Ship detail — not yet implemented.</p>
-  <a href="/">Back</a>
+  <a href="/">← Back</a>
+  <h1>{{ ship.name }}</h1>
+
+  {% if has_photo %}
+    <img src="/static/photos/{{ mmsi }}.jpg" alt="Photo of {{ ship.name }}">
+  {% endif %}
+
+  <h2>Ship Details</h2>
+  <table>
+    <tr><th>MMSI</th><td>{{ ship.mmsi }}</td></tr>
+    <tr><th>Flag</th><td>{{ display_flag or '—' }}</td></tr>
+    <tr><th>Ship Type</th><td>{{ ship.ship_type or '—' }}</td></tr>
+    <tr><th>Status</th><td>{{ ship.status if ship.status is not none else '—' }}</td></tr>
+    <tr><th>Destination</th><td>{{ ship.destination or '—' }}</td></tr>
+    <tr><th>Latitude</th><td>{{ ship.latitude or '—' }}</td></tr>
+    <tr><th>Longitude</th><td>{{ ship.longitude or '—' }}</td></tr>
+    <tr><th>Speed (kn)</th><td>{{ ship.speed or '—' }}</td></tr>
+    <tr><th>Heading (°)</th><td>{{ ship.heading or '—' }}</td></tr>
+    <tr><th>Course (°)</th><td>{{ ship.course or '—' }}</td></tr>
+    {% if distance_km is not none %}
+    <tr><th>Distance</th><td>{{ distance_km }} km {{ bearing }}</td></tr>
+    {% endif %}
+    <tr><th>First Seen</th><td>{{ ship.first_seen }}</td></tr>
+    <tr><th>Last Seen</th><td>{{ ship.last_seen }}</td></tr>
+    <tr><th>Visit Count</th><td>{{ ship.visit_count }}</td></tr>
+  </table>
+
+  {% if enrichment %}
+  <h2>Enrichment Data</h2>
+  <table>
+    <tr><th>Source</th><td>{{ enrichment.source or '—' }}</td></tr>
+    <tr><th>IMO</th><td>{{ enrichment.imo or '—' }}</td></tr>
+    <tr><th>Call Sign</th><td>{{ enrichment.call_sign or '—' }}</td></tr>
+    <tr><th>Type Label</th><td>{{ enrichment.ship_type_label or '—' }}</td></tr>
+    <tr><th>Length (m)</th><td>{{ enrichment.length_m or '—' }}</td></tr>
+    <tr><th>Build Year</th><td>{{ enrichment.build_year or '—' }}</td></tr>
+    <tr><th>Owner</th><td>{{ enrichment.owner or '—' }}</td></tr>
+    <tr><th>Fetched At</th><td>{{ enrichment.fetched_at or '—' }}</td></tr>
+  </table>
+  {% else %}
+  <p><em>No enrichment data available.</em></p>
+  {% endif %}
+
+  <h2>Visit History</h2>
+  {% if visits %}
+  <table>
+    <tr><th>Arrived</th><th>Departed</th></tr>
+    {% for v in visits %}
+    <tr>
+      <td>{{ v.arrived_at }}</td>
+      <td>{{ v.departed_at or 'Still present' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+    <p>No visit history.</p>
+  {% endif %}
 </body>
 </html>

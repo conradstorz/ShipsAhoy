@@ -25,6 +25,7 @@ import argparse
 import logging
 import sys
 import time
+from datetime import datetime, timedelta
 
 from ships_ahoy.config import Config
 from ships_ahoy.db import (
@@ -67,17 +68,41 @@ def _handle_overflow(conn, events, driver) -> None:
     Marks all pending events as displayed without scrolling them individually,
     then scrolls a single summary.
     """
-    raise NotImplementedError
+    cutoff = (datetime.now() - timedelta(minutes=OVERFLOW_AGE_MINUTES)).isoformat()
+    flushed = 0
+    for event in events:
+        if event["created_at"] < cutoff:
+            mark_event_displayed(conn, event["id"])
+            flushed += 1
+
+    if flushed > 0:
+        msg = f"ShipsAhoy — {flushed} new events (queue flushed)"
+        driver.scroll_text(msg, speed_px_per_sec=40)
+        logger.info("Overflow: flushed %d stale events", flushed)
 
 
 def _display_event(conn, event_row, driver, cfg: Config) -> None:
     """Fetch ship and enrichment data, format ticker message, scroll it, mark displayed."""
-    raise NotImplementedError
+    ship_row = get_ship(conn, event_row["mmsi"])
+    if ship_row is None:
+        mark_event_displayed(conn, event_row["id"])
+        return
+    enrichment_row = get_enrichment(conn, event_row["mmsi"])
+    text = format_ticker_message(event_row, ship_row, enrichment_row)
+    driver.scroll_text(text, speed_px_per_sec=cfg.scroll_speed)
+    mark_event_displayed(conn, event_row["id"])
 
 
 def _show_idle(conn, driver, cfg: Config) -> None:
     """Display the idle message showing current ship count."""
-    raise NotImplementedError
+    home = cfg.home_location
+    if home:
+        ships = get_ships_in_range(conn, home[0], home[1], cfg.distance_km)
+        count = len(ships)
+    else:
+        count = conn.execute("SELECT COUNT(*) FROM ships").fetchone()[0]
+    msg = f"ShipsAhoy — {count} ships nearby"
+    driver.show_static(msg, duration_sec=POLL_INTERVAL_SEC)
 
 
 def main() -> None:

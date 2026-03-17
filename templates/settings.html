@@ -3,10 +3,53 @@
 <head>
   <meta charset="UTF-8">
   <title>ShipsAhoy — Settings</title>
+  <style>
+    body { font-family: monospace; max-width: 600px; margin: 2em auto; }
+    label { display: block; margin-top: 1em; font-weight: bold; }
+    input { width: 100%; padding: 0.4em; font-family: monospace; box-sizing: border-box; }
+    button { margin-top: 1.5em; padding: 0.5em 2em; font-size: 1em; }
+    .hint { font-size: 0.85em; color: #666; margin-top: 0.2em; }
+  </style>
 </head>
 <body>
+  <a href="/">← Back</a>
   <h1>Settings</h1>
-  <p>Settings form — not yet implemented.</p>
-  <a href="/">Back</a>
+
+  <form method="POST" action="/settings">
+    <label for="home_lat">Home Latitude</label>
+    <input type="text" id="home_lat" name="home_lat"
+           value="{{ settings.home_lat or '' }}" placeholder="e.g. 51.5074">
+    <p class="hint">Required for distance calculations and event filtering.</p>
+
+    <label for="home_lon">Home Longitude</label>
+    <input type="text" id="home_lon" name="home_lon"
+           value="{{ settings.home_lon or '' }}" placeholder="e.g. -0.1278">
+
+    <label for="distance_km">Noteworthy Distance (km)</label>
+    <input type="text" id="distance_km" name="distance_km"
+           value="{{ settings.distance_km }}">
+    <p class="hint">Ships within this radius trigger events.</p>
+
+    <label for="scroll_speed_px_per_sec">Ticker Scroll Speed (px/sec)</label>
+    <input type="text" id="scroll_speed_px_per_sec" name="scroll_speed_px_per_sec"
+           value="{{ settings.scroll_speed_px_per_sec }}">
+
+    <label for="stale_ship_hours">Stale Ship Hours</label>
+    <input type="text" id="stale_ship_hours" name="stale_ship_hours"
+           value="{{ settings.stale_ship_hours }}">
+    <p class="hint">Hours before an absent ship fires a DEPARTED event.</p>
+
+    <label for="enrichment_delay_sec">Enrichment Delay (sec)</label>
+    <input type="text" id="enrichment_delay_sec" name="enrichment_delay_sec"
+           value="{{ settings.enrichment_delay_sec }}">
+    <p class="hint">Pause between web scrape requests.</p>
+
+    <label for="enrichment_max_attempts">Enrichment Max Attempts</label>
+    <input type="text" id="enrichment_max_attempts" name="enrichment_max_attempts"
+           value="{{ settings.enrichment_max_attempts }}">
+    <p class="hint">Stop retrying after this many failures.</p>
+
+    <button type="submit">Save Settings</button>
+  </form>
 </body>
 </html>

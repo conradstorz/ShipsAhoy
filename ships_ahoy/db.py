@@ -134,22 +134,57 @@ def upsert_ship(conn: sqlite3.Connection, ship: ShipInfo) -> None:
     Updates all known fields. first_seen is only set on first insert.
     visit_count is managed separately via record_visit/close_visit.
     """
-    raise NotImplementedError
+    now = ship.last_seen.isoformat()
+    conn.execute(
+        """
+        INSERT INTO ships (mmsi, name, ship_type, flag, latitude, longitude,
+                           speed, heading, course, status, destination,
+                           first_seen, last_seen)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(mmsi) DO UPDATE SET
+            name        = excluded.name,
+            ship_type   = excluded.ship_type,
+            flag        = excluded.flag,
+            latitude    = excluded.latitude,
+            longitude   = excluded.longitude,
+            speed       = excluded.speed,
+            heading     = excluded.heading,
+            course      = excluded.course,
+            status      = excluded.status,
+            destination = excluded.destination,
+            last_seen   = excluded.last_seen
+        """,
+        (
+            ship.mmsi, ship.name, ship.ship_type, ship.flag,
+            ship.latitude, ship.longitude, ship.speed, ship.heading,
+            ship.course, ship.status, ship.destination, now, now,
+        ),
+    )
+    conn.commit()
 
 
 def get_ship(conn: sqlite3.Connection, mmsi: int) -> Optional[sqlite3.Row]:
     """Return the ships row for *mmsi*, or None if not found."""
-    raise NotImplementedError
+    return conn.execute("SELECT * FROM ships WHERE mmsi=?", (mmsi,)).fetchone()
 
 
 def get_enrichment(conn: sqlite3.Connection, mmsi: int) -> Optional[sqlite3.Row]:
     """Return the enrichment row for *mmsi*, or None if not found."""
-    raise NotImplementedError
+    return conn.execute("SELECT * FROM enrichment WHERE mmsi=?", (mmsi,)).fetchone()
 
 
 def get_unenriched_ships(conn: sqlite3.Connection, max_attempts: int) -> list[int]:
     """Return MMSIs where enriched=FALSE and fetch_attempts < max_attempts."""
-    raise NotImplementedError
+    rows = conn.execute(
+        """
+        SELECT s.mmsi FROM ships s
+        LEFT JOIN enrichment e ON s.mmsi = e.mmsi
+        WHERE s.enriched = FALSE
+          AND COALESCE(e.fetch_attempts, 0) < ?
+        """,
+        (max_attempts,),
+    ).fetchall()
+    return [r["mmsi"] for r in rows]
 
 
 def save_enrichment(conn: sqlite3.Connection, mmsi: int, data: dict) -> None:
@@ -161,7 +196,32 @@ def save_enrichment(conn: sqlite3.Connection, mmsi: int, data: dict) -> None:
         Dict with any subset of enrichment table columns as keys.
         Only keys present in data are written.
     """
-    raise NotImplementedError
+    from datetime import datetime
+
+    allowed = {
+        "vessel_name", "imo", "call_sign", "flag", "ship_type_label",
+        "length_m", "build_year", "owner", "photo_url", "photo_path", "source",
+    }
+    fields = {k: v for k, v in data.items() if k in allowed}
+    fields["fetched_at"] = datetime.now().isoformat()
+
+    existing = conn.execute("SELECT mmsi FROM enrichment WHERE mmsi=?", (mmsi,)).fetchone()
+    if existing:
+        set_clause = ", ".join(f"{k}=?" for k in fields)
+        conn.execute(
+            f"UPDATE enrichment SET {set_clause} WHERE mmsi=?",
+            (*fields.values(), mmsi),
+        )
+    else:
+        cols = ["mmsi"] + list(fields.keys())
+        placeholders = ", ".join("?" for _ in cols)
+        conn.execute(
+            f"INSERT INTO enrichment ({', '.join(cols)}) VALUES ({placeholders})",
+            (mmsi, *fields.values()),
+        )
+
+    conn.execute("UPDATE ships SET enriched=TRUE WHERE mmsi=?", (mmsi,))
+    conn.commit()
 
 
 def write_event(
@@ -171,22 +231,38 @@ def write_event(
     detail: str,
 ) -> None:
     """Append a new event row with created_at=now() and displayed_at=NULL."""
-    raise NotImplementedError
+    from datetime import datetime
+
+    conn.execute(
+        "INSERT INTO events (mmsi, event_type, detail, created_at) VALUES (?, ?, ?, ?)",
+        (mmsi, event_type, detail, datetime.now().isoformat()),
+    )
+    conn.commit()
 
 
 def get_pending_events(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     """Return all events where displayed_at IS NULL, ordered by created_at ASC."""
-    raise NotImplementedError
+    return conn.execute(
+        "SELECT * FROM events WHERE displayed_at IS NULL ORDER BY created_at ASC"
+    ).fetchall()
 
 
 def get_recent_events(conn: sqlite3.Connection, limit: int = 50) -> list[sqlite3.Row]:
     """Return the most recent *limit* events ordered by created_at DESC."""
-    raise NotImplementedError
+    return conn.execute(
+        "SELECT * FROM events ORDER BY created_at DESC LIMIT ?", (limit,)
+    ).fetchall()
 
 
 def mark_event_displayed(conn: sqlite3.Connection, event_id: int) -> None:
     """Set displayed_at=now() for the given event id."""
-    raise NotImplementedError
+    from datetime import datetime
+
+    conn.execute(
+        "UPDATE events SET displayed_at=? WHERE id=?",
+        (datetime.now().isoformat(), event_id),
+    )
+    conn.commit()
 
 
 def get_ships_in_range(
@@ -195,28 +271,59 @@ def get_ships_in_range(
     home_lon: float,
     km: float,
 ) -> list[sqlite3.Row]:
-    """Return ships rows where last_seen is within the last stale_ship_hours
-    and the haversine distance from (home_lat, home_lon) is <= km.
+    """Return ships rows where the haversine distance from (home_lat, home_lon) is <= km.
 
-    Note: distance filtering is done in Python after fetching recently-seen
-    ships (SQLite cannot compute haversine natively).
+    Note: distance filtering is done in Python after fetching ships with known
+    positions (SQLite cannot compute haversine natively).
     """
-    raise NotImplementedError
+    from ships_ahoy.distance import haversine_km
+
+    rows = conn.execute(
+        "SELECT * FROM ships WHERE latitude IS NOT NULL AND longitude IS NOT NULL"
+    ).fetchall()
+    return [
+        r for r in rows
+        if haversine_km(home_lat, home_lon, r["latitude"], r["longitude"]) <= km
+    ]
 
 
 def get_visit_history(conn: sqlite3.Connection, mmsi: int) -> list[sqlite3.Row]:
     """Return all ship_visits rows for *mmsi*, newest first."""
-    raise NotImplementedError
+    return conn.execute(
+        "SELECT * FROM ship_visits WHERE mmsi=? ORDER BY id DESC", (mmsi,)
+    ).fetchall()
 
 
 def record_visit(conn: sqlite3.Connection, mmsi: int) -> None:
     """Insert an open ship_visits row (departed_at NULL) and increment visit_count."""
-    raise NotImplementedError
+    from datetime import datetime
+
+    conn.execute(
+        "INSERT INTO ship_visits (mmsi, arrived_at) VALUES (?, ?)",
+        (mmsi, datetime.now().isoformat()),
+    )
+    conn.execute(
+        "UPDATE ships SET visit_count = visit_count + 1 WHERE mmsi=?", (mmsi,)
+    )
+    conn.commit()
 
 
 def close_visit(conn: sqlite3.Connection, mmsi: int) -> None:
     """Set departed_at=now() on the most recent open visit row for *mmsi*."""
-    raise NotImplementedError
+    from datetime import datetime
+
+    conn.execute(
+        """
+        UPDATE ship_visits SET departed_at=?
+        WHERE id = (
+            SELECT id FROM ship_visits
+            WHERE mmsi=? AND departed_at IS NULL
+            ORDER BY id DESC LIMIT 1
+        )
+        """,
+        (datetime.now().isoformat(), mmsi),
+    )
+    conn.commit()
 
 
 def mark_ship_departed(conn: sqlite3.Connection, mmsi: int) -> None:
@@ -225,4 +332,5 @@ def mark_ship_departed(conn: sqlite3.Connection, mmsi: int) -> None:
     Does NOT delete the ships row — history is preserved permanently.
     Calls write_event() and close_visit() atomically within one transaction.
     """
-    raise NotImplementedError
+    write_event(conn, mmsi, "DEPARTED", f"Ship {mmsi} departed")
+    close_visit(conn, mmsi)

@@ -23,6 +23,36 @@ from typing import Optional
 
 from ships_ahoy.ship_tracker import ShipInfo
 
+# AIS navigation status codes → human-readable label
+_STATUS_LABELS = {
+    0: "underway",
+    1: "at anchor",
+    2: "not under command",
+    3: "restricted manoeuvrability",
+    4: "constrained by draught",
+    5: "moored",
+    6: "aground",
+    7: "fishing",
+    8: "underway sailing",
+    15: "undefined",
+}
+
+# AIS ship type ranges → short label
+def _ship_type_label(ship_type: Optional[int]) -> str:
+    if ship_type is None:
+        return "VESSEL"
+    if 70 <= ship_type <= 79:
+        return "CARGO"
+    if 80 <= ship_type <= 89:
+        return "TANKER"
+    if 60 <= ship_type <= 69:
+        return "PASSENGER"
+    if 30 <= ship_type <= 39:
+        return "FISHING"
+    if 50 <= ship_type <= 59:
+        return "SERVICE"
+    return "VESSEL"
+
 
 class EventType:
     """String constants for AIS event types stored in the events table."""
@@ -57,7 +87,19 @@ def detect_events(
     Detected changes:
     - Navigation status change (e.g. anchored → underway)
     """
-    raise NotImplementedError
+    events = []
+
+    if (
+        old_ship.status is not None
+        and new_ship.status is not None
+        and old_ship.status != new_ship.status
+    ):
+        old_label = _STATUS_LABELS.get(old_ship.status, str(old_ship.status))
+        new_label = _STATUS_LABELS.get(new_ship.status, str(new_ship.status))
+        detail = f"{new_ship.name} status: {old_label} → {new_label}"
+        events.append((EventType.STATUS_CHANGE, detail))
+
+    return events
 
 
 def format_ticker_message(
@@ -80,6 +122,19 @@ def format_ticker_message(
     -------
     str
         A compact single-line string. Example:
-        "⚓ CARGO 'ATLANTIC STAR' — underway — 2.3 km NE"
+        "⚓ CARGO 'ATLANTIC STAR' — ARRIVED — underway"
     """
-    raise NotImplementedError
+    name = (
+        enrichment_row["vessel_name"]
+        if enrichment_row and enrichment_row["vessel_name"]
+        else ship_row["name"]
+    )
+    type_label = _ship_type_label(ship_row["ship_type"])
+    event_type = event_row["event_type"]
+    status_label = _STATUS_LABELS.get(ship_row["status"], "")
+
+    parts = [f"{type_label} '{name}' — {event_type}"]
+    if status_label:
+        parts.append(status_label)
+
+    return " — ".join(parts)

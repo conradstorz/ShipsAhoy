@@ -43,6 +43,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_DB_PATH = "ships.db"
 DEFAULT_PHOTOS_DIR = "static/photos"
+_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; ShipsAhoy/1.0)"}
+_TIMEOUT = 10
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -63,7 +65,50 @@ def _scrape_shipxplorer(mmsi: int) -> Optional[dict]:
     ship_type_label, length_m, build_year, owner, photo_url, source.
     Returns None on any failure.
     """
-    raise NotImplementedError
+    url = f"https://www.shipxplorer.com/vessel/{mmsi}"
+    resp = requests.get(url, timeout=_TIMEOUT, headers=_HEADERS)
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    data: dict = {"source": "shipxplorer"}
+
+    h1 = soup.find("h1")
+    if h1:
+        data["vessel_name"] = h1.get_text(strip=True)
+
+    for row in soup.find_all("tr"):
+        cells = row.find_all("td")
+        if len(cells) < 2:
+            continue
+        key = cells[0].get_text(strip=True).lower()
+        val = cells[1].get_text(strip=True)
+        if not val:
+            continue
+        if "flag" in key:
+            data["flag"] = val
+        elif "imo" in key:
+            data["imo"] = val
+        elif "call" in key:
+            data["call_sign"] = val
+        elif "type" in key:
+            data["ship_type_label"] = val
+        elif "length" in key:
+            try:
+                data["length_m"] = float(val.split()[0])
+            except (ValueError, IndexError):
+                pass
+        elif "built" in key or "year" in key:
+            try:
+                data["build_year"] = int(val[:4])
+            except ValueError:
+                pass
+
+    img = soup.find("img", src=lambda s: s and ("vessel" in s.lower() or "/ships/" in s))
+    if img and img.get("src"):
+        src = img["src"]
+        data["photo_url"] = src if src.startswith("http") else f"https://www.shipxplorer.com{src}"
+
+    return data if len(data) > 1 else None
 
 
 def _scrape_marinetraffic(mmsi: int) -> Optional[dict]:
@@ -72,7 +117,37 @@ def _scrape_marinetraffic(mmsi: int) -> Optional[dict]:
     May return 403 or Cloudflare challenge — returns None on any failure.
     Returns same dict shape as _scrape_shipxplorer.
     """
-    raise NotImplementedError
+    url = f"https://www.marinetraffic.com/en/ais/details/ships/mmsi:{mmsi}"
+    resp = requests.get(url, timeout=_TIMEOUT, headers=_HEADERS)
+    resp.raise_for_status()
+
+    if resp.status_code == 403 or "cloudflare" in resp.text.lower():
+        return None
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+    data: dict = {"source": "marinetraffic"}
+
+    title = soup.find("title")
+    if title:
+        name = title.get_text(strip=True).split("|")[0].strip()
+        if name:
+            data["vessel_name"] = name
+
+    for item in soup.find_all(class_=lambda c: c and "vessel-detail" in c):
+        label_el = item.find(class_=lambda c: c and "label" in c)
+        value_el = item.find(class_=lambda c: c and "value" in c)
+        if not label_el or not value_el:
+            continue
+        key = label_el.get_text(strip=True).lower()
+        val = value_el.get_text(strip=True)
+        if "flag" in key:
+            data["flag"] = val
+        elif "imo" in key:
+            data["imo"] = val
+        elif "call" in key:
+            data["call_sign"] = val
+
+    return data if len(data) > 1 else None
 
 
 def _scrape_itu(mmsi: int) -> Optional[dict]:
@@ -81,7 +156,30 @@ def _scrape_itu(mmsi: int) -> Optional[dict]:
     Returns dict with vessel_name, call_sign, flag at minimum.
     Returns None on any failure.
     """
-    raise NotImplementedError
+    url = "https://www.itu.int/mmsapp/ShipSearch.do"
+    resp = requests.post(
+        url,
+        data={"maritimeId": str(mmsi), "action": "search"},
+        timeout=_TIMEOUT,
+        headers=_HEADERS,
+    )
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    data: dict = {"source": "itu"}
+    table = soup.find("table")
+    if not table:
+        return None
+
+    for row in table.find_all("tr")[1:]:  # skip header
+        cells = row.find_all("td")
+        if len(cells) >= 3:
+            data["vessel_name"] = cells[0].get_text(strip=True)
+            data["call_sign"] = cells[1].get_text(strip=True)
+            data["flag"] = cells[2].get_text(strip=True)
+            break
+
+    return data if len(data) > 1 else None
 
 
 def _download_photo(photo_url: str, mmsi: int, photos_dir: Path) -> Optional[str]:
@@ -89,7 +187,16 @@ def _download_photo(photo_url: str, mmsi: int, photos_dir: Path) -> Optional[str
 
     Returns the local file path string on success, None on failure.
     """
-    raise NotImplementedError
+    resp = requests.get(photo_url, timeout=_TIMEOUT, headers=_HEADERS, stream=True)
+    resp.raise_for_status()
+    content_type = resp.headers.get("content-type", "")
+    if "image" not in content_type:
+        return None
+    dest = photos_dir / f"{mmsi}.jpg"
+    with open(dest, "wb") as f:
+        for chunk in resp.iter_content(chunk_size=8192):
+            f.write(chunk)
+    return str(dest)
 
 
 def _enrich_ship(mmsi: int, photos_dir: Path) -> Optional[dict]:

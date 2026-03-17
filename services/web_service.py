@@ -64,31 +64,119 @@ def _get_cfg():
 @app.route("/")
 def index():
     """Ship list sorted by last_seen descending, with distance and type."""
-    raise NotImplementedError
+    conn = _get_conn()
+    cfg = _get_cfg()
+    home = cfg.home_location
+
+    rows = conn.execute(
+        "SELECT * FROM ships ORDER BY last_seen DESC"
+    ).fetchall()
+
+    ships = []
+    for row in rows:
+        ship = dict(row)
+        if home and ship["latitude"] and ship["longitude"]:
+            km = haversine_km(home[0], home[1], ship["latitude"], ship["longitude"])
+            bear = bearing_degrees(home[0], home[1], ship["latitude"], ship["longitude"])
+            ship["distance_km"] = round(km, 1)
+            ship["bearing"] = bearing_to_cardinal(bear)
+        else:
+            ship["distance_km"] = None
+            ship["bearing"] = None
+        ships.append(ship)
+
+    return render_template("index.html", ships=ships, home=home)
 
 
 @app.route("/ship/<int:mmsi>")
 def ship_detail(mmsi: int):
     """Ship detail page: all DB fields + enrichment + visit history + photo."""
-    raise NotImplementedError
+    conn = _get_conn()
+    cfg = _get_cfg()
+
+    ship_row = get_ship(conn, mmsi)
+    if ship_row is None:
+        return "Ship not found", 404
+
+    enrichment_row = get_enrichment(conn, mmsi)
+    visits = get_visit_history(conn, mmsi)
+    home = cfg.home_location
+
+    ship = dict(ship_row)
+    enrichment = dict(enrichment_row) if enrichment_row else None
+
+    # Flag display rule: enrichment.flag takes priority
+    display_flag = (enrichment or {}).get("flag") or ship.get("flag")
+
+    distance_km = None
+    bearing = None
+    if home and ship["latitude"] and ship["longitude"]:
+        distance_km = round(
+            haversine_km(home[0], home[1], ship["latitude"], ship["longitude"]), 1
+        )
+        bearing = bearing_to_cardinal(
+            bearing_degrees(home[0], home[1], ship["latitude"], ship["longitude"])
+        )
+
+    photo_path = (enrichment or {}).get("photo_path")
+    has_photo = photo_path is not None and os.path.exists(photo_path)
+
+    return render_template(
+        "ship.html",
+        ship=ship,
+        enrichment=enrichment,
+        visits=visits,
+        display_flag=display_flag,
+        distance_km=distance_km,
+        bearing=bearing,
+        has_photo=has_photo,
+        mmsi=mmsi,
+    )
 
 
 @app.route("/events")
 def events():
     """Recent 50 events, newest first."""
-    raise NotImplementedError
+    conn = _get_conn()
+    event_rows = get_recent_events(conn, limit=50)
+    event_list = []
+    for row in event_rows:
+        e = dict(row)
+        ship_row = get_ship(conn, row["mmsi"])
+        e["ship_name"] = ship_row["name"] if ship_row else str(row["mmsi"])
+        event_list.append(e)
+    return render_template("events.html", events=event_list)
 
 
 @app.route("/settings", methods=["GET"])
 def settings_get():
     """Settings form pre-populated from the settings table."""
-    raise NotImplementedError
+    cfg = _get_cfg()
+    settings = {
+        "home_lat": cfg.get("home_lat", ""),
+        "home_lon": cfg.get("home_lon", ""),
+        "distance_km": cfg.get("distance_km", "50"),
+        "scroll_speed_px_per_sec": cfg.get("scroll_speed_px_per_sec", "40"),
+        "stale_ship_hours": cfg.get("stale_ship_hours", "1"),
+        "enrichment_delay_sec": cfg.get("enrichment_delay_sec", "10"),
+        "enrichment_max_attempts": cfg.get("enrichment_max_attempts", "3"),
+    }
+    return render_template("settings.html", settings=settings)
 
 
 @app.route("/settings", methods=["POST"])
 def settings_post():
     """Save submitted settings values and redirect to GET /settings."""
-    raise NotImplementedError
+    cfg = _get_cfg()
+    keys = [
+        "home_lat", "home_lon", "distance_km", "scroll_speed_px_per_sec",
+        "stale_ship_hours", "enrichment_delay_sec", "enrichment_max_attempts",
+    ]
+    for key in keys:
+        value = request.form.get(key, "").strip()
+        if value:
+            cfg.set(key, value)
+    return redirect(url_for("settings_get"))
 
 
 def _build_parser() -> argparse.ArgumentParser:
