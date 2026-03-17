@@ -19,6 +19,7 @@ Usage::
 """
 
 import sqlite3
+from enum import StrEnum
 from typing import Optional
 
 from ships_ahoy.ship_tracker import ShipInfo
@@ -54,8 +55,8 @@ def _ship_type_label(ship_type: Optional[int]) -> str:
     return "VESSEL"
 
 
-class EventType:
-    """String constants for AIS event types stored in the events table."""
+class EventType(StrEnum):
+    """AIS event types stored in the events table."""
 
     ARRIVED = "ARRIVED"
     DEPARTED = "DEPARTED"

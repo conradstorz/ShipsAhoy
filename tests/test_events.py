@@ -83,7 +83,7 @@ def db_rows():
     ship = ShipInfo(mmsi=987654321, name="ATLANTIC STAR", ship_type=70,
                     latitude=51.52, longitude=-0.09, status=0)
     upsert_ship(conn, ship)
-    write_event(conn, 987654321, "ARRIVED", "Ship arrived")
+    write_event(conn, 987654321, EventType.ARRIVED, "Ship arrived")
     event_row = get_recent_events(conn, limit=1)[0]
     ship_row = conn.execute("SELECT * FROM ships WHERE mmsi=987654321").fetchone()
     return event_row, ship_row, None
@@ -117,7 +117,7 @@ def test_format_ticker_message_uses_enrichment_name_when_available():
     conn = init_db(":memory:")
     ship = ShipInfo(mmsi=111222333, name="AIS NAME")
     upsert_ship(conn, ship)
-    write_event(conn, 111222333, "ARRIVED", "Ship arrived")
+    write_event(conn, 111222333, EventType.ARRIVED, "Ship arrived")
     conn.execute(
         "INSERT INTO enrichment (mmsi, vessel_name) VALUES (?, ?)",
         (111222333, "ENRICHED NAME"),

@@ -17,12 +17,17 @@ from ships_ahoy.db import (
     get_pending_events,
     get_recent_events,
     mark_event_displayed,
+    batch_mark_events_displayed,
     get_ships_in_range,
+    get_all_ships,
+    count_ships,
+    get_stale_mmsis,
     get_visit_history,
     record_visit,
     close_visit,
     mark_ship_departed,
 )
+from ships_ahoy.events import EventType
 from ships_ahoy.ship_tracker import ShipInfo
 
 
@@ -150,10 +155,10 @@ def test_get_ship_returns_row_after_upsert(conn):
 def test_write_event_inserts_row(conn):
     ship = ShipInfo(mmsi=555555555)
     upsert_ship(conn, ship)
-    write_event(conn, 555555555, "ARRIVED", "Ship arrived")
+    write_event(conn, 555555555, EventType.ARRIVED, "Ship arrived")
     row = conn.execute("SELECT * FROM events WHERE mmsi=555555555").fetchone()
     assert row is not None
-    assert row["event_type"] == "ARRIVED"
+    assert row["event_type"] == EventType.ARRIVED
     assert row["detail"] == "Ship arrived"
     assert row["displayed_at"] is None
 
@@ -161,7 +166,7 @@ def test_write_event_inserts_row(conn):
 def test_get_pending_events_returns_undisplayed(conn):
     ship = ShipInfo(mmsi=666666666)
     upsert_ship(conn, ship)
-    write_event(conn, 666666666, "ARRIVED", "detail")
+    write_event(conn, 666666666, EventType.ARRIVED, "detail")
     events = get_pending_events(conn)
     assert len(events) == 1
     assert events[0]["mmsi"] == 666666666
@@ -170,7 +175,7 @@ def test_get_pending_events_returns_undisplayed(conn):
 def test_get_pending_events_excludes_displayed(conn):
     ship = ShipInfo(mmsi=777777777)
     upsert_ship(conn, ship)
-    write_event(conn, 777777777, "ARRIVED", "detail")
+    write_event(conn, 777777777, EventType.ARRIVED, "detail")
     event_id = conn.execute("SELECT id FROM events WHERE mmsi=777777777").fetchone()["id"]
     mark_event_displayed(conn, event_id)
     assert get_pending_events(conn) == []
@@ -179,7 +184,7 @@ def test_get_pending_events_excludes_displayed(conn):
 def test_get_pending_events_ordered_by_created_at(conn):
     for mmsi in [100000001, 100000002, 100000003]:
         upsert_ship(conn, ShipInfo(mmsi=mmsi))
-        write_event(conn, mmsi, "ARRIVED", f"ship {mmsi}")
+        write_event(conn, mmsi, EventType.ARRIVED, f"ship {mmsi}")
     events = get_pending_events(conn)
     mmsis = [e["mmsi"] for e in events]
     assert mmsis == sorted(mmsis)
@@ -188,7 +193,7 @@ def test_get_pending_events_ordered_by_created_at(conn):
 def test_mark_event_displayed_sets_timestamp(conn):
     ship = ShipInfo(mmsi=888888888)
     upsert_ship(conn, ship)
-    write_event(conn, 888888888, "ARRIVED", "detail")
+    write_event(conn, 888888888, EventType.ARRIVED, "detail")
     event_id = conn.execute("SELECT id FROM events WHERE mmsi=888888888").fetchone()["id"]
     mark_event_displayed(conn, event_id)
     row = conn.execute("SELECT displayed_at FROM events WHERE id=?", (event_id,)).fetchone()
@@ -198,7 +203,7 @@ def test_mark_event_displayed_sets_timestamp(conn):
 def test_get_recent_events_returns_newest_first(conn):
     for mmsi in [200000001, 200000002, 200000003]:
         upsert_ship(conn, ShipInfo(mmsi=mmsi))
-        write_event(conn, mmsi, "ARRIVED", f"ship {mmsi}")
+        write_event(conn, mmsi, EventType.ARRIVED, f"ship {mmsi}")
     events = get_recent_events(conn)
     ids = [e["id"] for e in events]
     assert ids == sorted(ids, reverse=True)
@@ -207,7 +212,7 @@ def test_get_recent_events_returns_newest_first(conn):
 def test_get_recent_events_respects_limit(conn):
     for mmsi in range(300000001, 300000011):  # 10 ships
         upsert_ship(conn, ShipInfo(mmsi=mmsi))
-        write_event(conn, mmsi, "ARRIVED", "detail")
+        write_event(conn, mmsi, EventType.ARRIVED, "detail")
     events = get_recent_events(conn, limit=5)
     assert len(events) == 5
 
@@ -350,7 +355,7 @@ def test_mark_ship_departed_writes_departed_event(conn):
     row = conn.execute(
         "SELECT event_type FROM events WHERE mmsi=700000001"
     ).fetchone()
-    assert row["event_type"] == "DEPARTED"
+    assert row["event_type"] == EventType.DEPARTED
 
 
 def test_mark_ship_departed_closes_visit(conn):
@@ -488,3 +493,78 @@ def test_failed_enrichment_does_not_mark_ship_enriched(conn):
     increment_fetch_attempts(conn, 910000005)
     result = get_unenriched_ships(conn, max_attempts=3)
     assert 910000005 in result  # still eligible (only 2 of 3 attempts used)
+
+
+# ---------------------------------------------------------------------------
+# get_all_ships / count_ships
+# ---------------------------------------------------------------------------
+
+def test_get_all_ships_returns_all_rows(conn):
+    for mmsi in [920000001, 920000002, 920000003]:
+        upsert_ship(conn, ShipInfo(mmsi=mmsi))
+    rows = get_all_ships(conn)
+    mmsis = [r["mmsi"] for r in rows]
+    assert 920000001 in mmsis
+    assert 920000002 in mmsis
+    assert 920000003 in mmsis
+
+
+def test_get_all_ships_ordered_by_last_seen_desc(conn):
+    for mmsi in [920000004, 920000005]:
+        upsert_ship(conn, ShipInfo(mmsi=mmsi))
+    rows = get_all_ships(conn)
+    last_seens = [r["last_seen"] for r in rows]
+    assert last_seens == sorted(last_seens, reverse=True)
+
+
+def test_count_ships_returns_zero_for_empty_db(conn):
+    assert count_ships(conn) == 0
+
+
+def test_count_ships_returns_correct_count(conn):
+    for mmsi in [930000001, 930000002]:
+        upsert_ship(conn, ShipInfo(mmsi=mmsi))
+    assert count_ships(conn) == 2
+
+
+# ---------------------------------------------------------------------------
+# get_stale_mmsis
+# ---------------------------------------------------------------------------
+
+def test_get_stale_mmsis_returns_ships_with_open_visit_past_threshold(conn):
+    import time
+    ship = ShipInfo(mmsi=940000001)
+    upsert_ship(conn, ship)
+    record_visit(conn, 940000001)
+    # Use a future threshold so this ship is "stale"
+    future = "9999-01-01T00:00:00"
+    result = get_stale_mmsis(conn, future)
+    assert 940000001 in result
+
+
+def test_get_stale_mmsis_excludes_ships_with_closed_visit(conn):
+    ship = ShipInfo(mmsi=940000002)
+    upsert_ship(conn, ship)
+    record_visit(conn, 940000002)
+    close_visit(conn, 940000002)
+    future = "9999-01-01T00:00:00"
+    result = get_stale_mmsis(conn, future)
+    assert 940000002 not in result
+
+
+# ---------------------------------------------------------------------------
+# batch_mark_events_displayed
+# ---------------------------------------------------------------------------
+
+def test_batch_mark_events_displayed_marks_all(conn):
+    for mmsi in [950000001, 950000002]:
+        upsert_ship(conn, ShipInfo(mmsi=mmsi))
+        write_event(conn, mmsi, EventType.ARRIVED, "detail")
+    event_ids = [r["id"] for r in conn.execute("SELECT id FROM events").fetchall()]
+    batch_mark_events_displayed(conn, event_ids)
+    assert get_pending_events(conn) == []
+
+
+def test_batch_mark_events_displayed_no_op_on_empty_list(conn):
+    # Should not raise
+    batch_mark_events_displayed(conn, [])

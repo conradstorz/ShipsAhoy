@@ -28,16 +28,17 @@ import sys
 import time
 from datetime import datetime, timedelta
 
+
 from ships_ahoy.ais_receiver import AISReceiver, DEFAULT_HOST, DEFAULT_TCP_PORT
 from ships_ahoy.config import Config
-from ships_ahoy.db import init_db, get_ship, upsert_ship, write_event, record_visit, mark_ship_departed
+from ships_ahoy.db import init_db, get_ship, upsert_ship, write_event, record_visit, mark_ship_departed, get_stale_mmsis
 from ships_ahoy.distance import is_noteworthy
 from ships_ahoy.events import EventType, detect_events
+from ships_ahoy.service_utils import DEFAULT_DB_PATH, configure_logging
 from ships_ahoy.ship_tracker import ShipInfo, ShipTracker
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DB_PATH = "ships.db"
 SWEEP_INTERVAL_SEC = 300  # 5 minutes
 MAX_BACKOFF_SEC = 60
 
@@ -81,27 +82,14 @@ def _connect_with_backoff(host: str, port: int, use_udp: bool) -> AISReceiver:
 
 
 def _run_stale_sweep(conn, cfg: Config) -> None:
-    """Query for ships past stale_ship_hours that still have an open visit, and mark each departed.
-
-    The JOIN on ship_visits WHERE departed_at IS NULL ensures ships already marked
-    as departed are never processed twice, preventing duplicate DEPARTED events.
-    """
-    threshold = datetime.now() - timedelta(hours=cfg.stale_ship_hours)
-    rows = conn.execute(
-        """
-        SELECT DISTINCT s.mmsi FROM ships s
-        JOIN ship_visits sv ON s.mmsi = sv.mmsi
-        WHERE s.last_seen < ?
-          AND sv.departed_at IS NULL
-        """,
-        (threshold.isoformat(),),
-    ).fetchall()
-    for row in rows:
+    """Query for ships past stale_ship_hours that still have an open visit, and mark each departed."""
+    threshold = (datetime.now() - timedelta(hours=cfg.stale_ship_hours)).isoformat()
+    for mmsi in get_stale_mmsis(conn, threshold):
         try:
-            mark_ship_departed(conn, row["mmsi"])
-            logger.info("Stale sweep: marked MMSI %d as departed", row["mmsi"])
+            mark_ship_departed(conn, mmsi)
+            logger.info("Stale sweep: marked MMSI %d as departed", mmsi)
         except Exception:
-            logger.exception("Stale sweep: error marking MMSI %d as departed", row["mmsi"])
+            logger.exception("Stale sweep: error marking MMSI %d as departed", mmsi)
 
 
 def _process_message(conn, msg, cfg: Config) -> None:
@@ -152,10 +140,7 @@ def _process_message(conn, msg, cfg: Config) -> None:
 def main() -> None:
     """Service entry point. Loops forever; reconnects on failure."""
     args = _build_parser().parse_args()
-    if args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.INFO)
+    configure_logging(args.verbose)
 
     conn = init_db(args.db)
     cfg = Config(conn)

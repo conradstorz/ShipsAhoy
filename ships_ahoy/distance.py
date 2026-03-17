@@ -58,6 +58,18 @@ def bearing_to_cardinal(degrees: float) -> str:
     return _CARDINALS[index]
 
 
+def distance_info(
+    home_lat: float,
+    home_lon: float,
+    ship_lat: float,
+    ship_lon: float,
+) -> tuple[float, str]:
+    """Return (distance_km rounded to 1dp, cardinal direction) from home to ship."""
+    km = round(haversine_km(home_lat, home_lon, ship_lat, ship_lon), 1)
+    cardinal = bearing_to_cardinal(bearing_degrees(home_lat, home_lon, ship_lat, ship_lon))
+    return km, cardinal
+
+
 def is_noteworthy(
     ship_lat: float,
     ship_lon: float,

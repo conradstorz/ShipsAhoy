@@ -27,17 +27,18 @@ from flask import Flask, render_template, request, redirect, url_for
 from ships_ahoy.config import Config
 from ships_ahoy.db import (
     init_db,
+    get_all_ships,
     get_ship,
     get_enrichment,
     get_ships_in_range,
     get_recent_events,
     get_visit_history,
 )
-from ships_ahoy.distance import haversine_km, bearing_degrees, bearing_to_cardinal
+from ships_ahoy.distance import distance_info
+from ships_ahoy.service_utils import DEFAULT_DB_PATH, configure_logging
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DB_PATH = "ships.db"
 DEFAULT_PORT = 5000
 
 app = Flask(__name__, template_folder="../templates", static_folder="../static")
@@ -68,18 +69,13 @@ def index():
     cfg = _get_cfg()
     home = cfg.home_location
 
-    rows = conn.execute(
-        "SELECT * FROM ships ORDER BY last_seen DESC"
-    ).fetchall()
-
     ships = []
-    for row in rows:
+    for row in get_all_ships(conn):
         ship = dict(row)
         if home and ship["latitude"] and ship["longitude"]:
-            km = haversine_km(home[0], home[1], ship["latitude"], ship["longitude"])
-            bear = bearing_degrees(home[0], home[1], ship["latitude"], ship["longitude"])
-            ship["distance_km"] = round(km, 1)
-            ship["bearing"] = bearing_to_cardinal(bear)
+            ship["distance_km"], ship["bearing"] = distance_info(
+                home[0], home[1], ship["latitude"], ship["longitude"]
+            )
         else:
             ship["distance_km"] = None
             ship["bearing"] = None
@@ -111,12 +107,7 @@ def ship_detail(mmsi: int):
     distance_km = None
     bearing = None
     if home and ship["latitude"] and ship["longitude"]:
-        distance_km = round(
-            haversine_km(home[0], home[1], ship["latitude"], ship["longitude"]), 1
-        )
-        bearing = bearing_to_cardinal(
-            bearing_degrees(home[0], home[1], ship["latitude"], ship["longitude"])
-        )
+        distance_km, bearing = distance_info(home[0], home[1], ship["latitude"], ship["longitude"])
 
     photo_path = (enrichment or {}).get("photo_path")
     has_photo = photo_path is not None and os.path.exists(photo_path)
@@ -138,12 +129,11 @@ def ship_detail(mmsi: int):
 def events():
     """Recent 50 events, newest first."""
     conn = _get_conn()
-    event_rows = get_recent_events(conn, limit=50)
+    ship_names = {r["mmsi"]: r["name"] for r in get_all_ships(conn)}
     event_list = []
-    for row in event_rows:
+    for row in get_recent_events(conn):
         e = dict(row)
-        ship_row = get_ship(conn, row["mmsi"])
-        e["ship_name"] = ship_row["name"] if ship_row else str(row["mmsi"])
+        e["ship_name"] = ship_names.get(row["mmsi"]) or str(row["mmsi"])
         event_list.append(e)
     return render_template("events.html", events=event_list)
 
@@ -212,10 +202,7 @@ def main() -> None:
     """Service entry point. Initialises DB connection then starts Flask."""
     global _conn, _cfg
     args = _build_parser().parse_args()
-    if args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.INFO)
+    configure_logging(args.verbose)
 
     _conn = init_db(args.db)
     _cfg = Config(_conn)

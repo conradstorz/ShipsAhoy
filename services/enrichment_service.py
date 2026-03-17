@@ -38,10 +38,10 @@ from bs4 import BeautifulSoup
 from ships_ahoy.config import Config
 from ships_ahoy.db import init_db, get_unenriched_ships, increment_fetch_attempts, save_enrichment, write_event
 from ships_ahoy.events import EventType
+from ships_ahoy.service_utils import DEFAULT_DB_PATH, configure_logging
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DB_PATH = "ships.db"
 DEFAULT_PHOTOS_DIR = "static/photos"
 _HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; ShipsAhoy/1.0)"}
 _TIMEOUT = 10
@@ -215,10 +215,7 @@ def _enrich_ship(mmsi: int, photos_dir: Path) -> Optional[dict]:
 def main() -> None:
     """Service entry point. Loops forever enriching unenriched ships."""
     args = _build_parser().parse_args()
-    if args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.INFO)
+    configure_logging(args.verbose)
 
     photos_dir = Path(args.photos_dir)
     photos_dir.mkdir(parents=True, exist_ok=True)

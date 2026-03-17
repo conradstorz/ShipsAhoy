@@ -34,9 +34,12 @@ from ships_ahoy.db import (
     get_enrichment,
     get_pending_events,
     mark_event_displayed,
+    batch_mark_events_displayed,
+    count_ships,
     get_ships_in_range,
 )
 from ships_ahoy.events import format_ticker_message
+from ships_ahoy.service_utils import DEFAULT_DB_PATH, configure_logging
 
 try:
     from ships_ahoy.matrix_driver import RGBMatrixDriver as _DriverClass
@@ -45,7 +48,6 @@ except (ImportError, NotImplementedError):
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DB_PATH = "ships.db"
 POLL_INTERVAL_SEC = 2
 OVERFLOW_THRESHOLD = 10   # "more than 10" means > 10 (fires at 11+)
 OVERFLOW_AGE_MINUTES = 5
@@ -70,13 +72,11 @@ def _handle_overflow(conn, events, driver, cfg: Config) -> None:
     displays the oldest one normally to avoid a spin loop.
     """
     cutoff = (datetime.now() - timedelta(minutes=OVERFLOW_AGE_MINUTES)).isoformat()
-    flushed = 0
-    for event in events:
-        if event["created_at"] < cutoff:
-            mark_event_displayed(conn, event["id"])
-            flushed += 1
+    stale_ids = [e["id"] for e in events if e["created_at"] < cutoff]
+    flushed = len(stale_ids)
 
     if flushed > 0:
+        batch_mark_events_displayed(conn, stale_ids)
         msg = f"ShipsAhoy — {flushed} new events (queue flushed)"
         driver.scroll_text(msg, speed_px_per_sec=cfg.scroll_speed)
         logger.info("Overflow: flushed %d stale events", flushed)
@@ -101,10 +101,9 @@ def _show_idle(conn, driver, cfg: Config) -> None:
     """Display the idle message showing current ship count."""
     home = cfg.home_location
     if home:
-        ships = get_ships_in_range(conn, home[0], home[1], cfg.distance_km)
-        count = len(ships)
+        count = len(get_ships_in_range(conn, home[0], home[1], cfg.distance_km))
     else:
-        count = conn.execute("SELECT COUNT(*) FROM ships").fetchone()[0]
+        count = count_ships(conn)
     msg = f"ShipsAhoy — {count} ships nearby"
     driver.show_static(msg, duration_sec=POLL_INTERVAL_SEC)
 
@@ -112,10 +111,7 @@ def _show_idle(conn, driver, cfg: Config) -> None:
 def main() -> None:
     """Service entry point. Polls for events and drives the LED display."""
     args = _build_parser().parse_args()
-    if args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.INFO)
+    configure_logging(args.verbose)
 
     conn = init_db(args.db)
     cfg = Config(conn)

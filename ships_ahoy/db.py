@@ -16,6 +16,7 @@ Usage::
 """
 
 import sqlite3
+from datetime import datetime
 from typing import Optional
 
 from ships_ahoy.ship_tracker import ShipInfo
@@ -87,15 +88,27 @@ CREATE TABLE IF NOT EXISTS ship_visits (
 )
 """
 
-_DEFAULT_SETTINGS = {
-    "home_lat": None,
-    "home_lon": None,
-    "distance_km": "50",
-    "scroll_speed_px_per_sec": "40",
-    "stale_ship_hours": "1",
-    "enrichment_delay_sec": "10",
-    "enrichment_max_attempts": "3",
-}
+_DEFAULT_SETTINGS = [
+    ("home_lat", None),
+    ("home_lon", None),
+    ("distance_km", "50"),
+    ("scroll_speed_px_per_sec", "40"),
+    ("stale_ship_hours", "1"),
+    ("enrichment_delay_sec", "10"),
+    ("enrichment_max_attempts", "3"),
+]
+
+# Columns that save_enrichment is permitted to write — fixed literal set so the
+# SQL template is never built from caller-supplied strings.
+_ENRICHMENT_ALLOWED_COLS = (
+    "vessel_name", "imo", "call_sign", "flag", "ship_type_label",
+    "length_m", "build_year", "owner", "photo_url", "photo_path", "source",
+)
+
+
+def _now_iso() -> str:
+    """Return the current UTC time as an ISO 8601 string."""
+    return datetime.now().isoformat()
 
 
 def init_db(path: str) -> sqlite3.Connection:
@@ -119,11 +132,10 @@ def init_db(path: str) -> sqlite3.Connection:
     conn.execute(_CREATE_ENRICHMENT)
     conn.execute(_CREATE_SETTINGS)
     conn.execute(_CREATE_SHIP_VISITS)
-    for key, value in _DEFAULT_SETTINGS.items():
-        conn.execute(
-            "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
-            (key, value),
-        )
+    conn.executemany(
+        "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
+        _DEFAULT_SETTINGS,
+    )
     conn.commit()
     return conn
 
@@ -168,6 +180,16 @@ def get_ship(conn: sqlite3.Connection, mmsi: int) -> Optional[sqlite3.Row]:
     return conn.execute("SELECT * FROM ships WHERE mmsi=?", (mmsi,)).fetchone()
 
 
+def get_all_ships(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Return all ships rows ordered by last_seen descending."""
+    return conn.execute("SELECT * FROM ships ORDER BY last_seen DESC").fetchall()
+
+
+def count_ships(conn: sqlite3.Connection) -> int:
+    """Return the total number of ships in the database."""
+    return conn.execute("SELECT COUNT(*) FROM ships").fetchone()[0]
+
+
 def get_enrichment(conn: sqlite3.Connection, mmsi: int) -> Optional[sqlite3.Row]:
     """Return the enrichment row for *mmsi*, or None if not found."""
     return conn.execute("SELECT * FROM enrichment WHERE mmsi=?", (mmsi,)).fetchone()
@@ -187,6 +209,23 @@ def get_unenriched_ships(conn: sqlite3.Connection, max_attempts: int) -> list[in
     return [r["mmsi"] for r in rows]
 
 
+def get_stale_mmsis(conn: sqlite3.Connection, threshold_iso: str) -> list[int]:
+    """Return MMSIs for ships last seen before *threshold_iso* that still have an open visit.
+
+    The open-visit join prevents duplicate DEPARTED events for ships already processed.
+    """
+    rows = conn.execute(
+        """
+        SELECT DISTINCT s.mmsi FROM ships s
+        JOIN ship_visits sv ON s.mmsi = sv.mmsi
+        WHERE s.last_seen < ?
+          AND sv.departed_at IS NULL
+        """,
+        (threshold_iso,),
+    ).fetchall()
+    return [r["mmsi"] for r in rows]
+
+
 def save_enrichment(conn: sqlite3.Connection, mmsi: int, data: dict) -> None:
     """Write or update an enrichment row and mark ships.enriched=TRUE.
 
@@ -196,47 +235,29 @@ def save_enrichment(conn: sqlite3.Connection, mmsi: int, data: dict) -> None:
         Dict with any subset of enrichment table columns as keys.
         Only keys present in data are written.
     """
-    from datetime import datetime
+    fields = {k: v for k, v in data.items() if k in _ENRICHMENT_ALLOWED_COLS}
+    fields["fetched_at"] = _now_iso()
 
-    # Only these column names are ever written — defined as a tuple of literals
-    # so the SQL template is built from a fixed, auditable set, never from caller input.
-    _ALLOWED_COLS = (
-        "vessel_name", "imo", "call_sign", "flag", "ship_type_label",
-        "length_m", "build_year", "owner", "photo_url", "photo_path", "source",
-    )
-    fields = {k: v for k, v in data.items() if k in _ALLOWED_COLS}
-    fields["fetched_at"] = datetime.now().isoformat()
-
-    # Build SQL from the fixed literal column set — no caller-controlled strings in template
     col_names = list(fields.keys())
-    placeholders = ", ".join("?" * len(col_names))
     values = list(fields.values())
+    placeholders = ", ".join("?" * len(col_names))
+    col_list = ", ".join(["mmsi"] + col_names)
+    set_clause = ", ".join(f"{c}=excluded.{c}" for c in col_names)
 
-    existing = conn.execute("SELECT mmsi FROM enrichment WHERE mmsi=?", (mmsi,)).fetchone()
-    if existing:
-        set_clause = ", ".join(f"{c}=?" for c in col_names)
-        conn.execute(
-            f"UPDATE enrichment SET {set_clause} WHERE mmsi=?",  # noqa: S608
-            (*values, mmsi),
-        )
-    else:
-        col_list = ", ".join(["mmsi"] + col_names)
-        conn.execute(
-            f"INSERT INTO enrichment ({col_list}) VALUES (?, {placeholders})",  # noqa: S608
-            (mmsi, *values),
-        )
-
+    conn.execute(
+        f"INSERT INTO enrichment ({col_list}) VALUES (?, {placeholders})"  # noqa: S608
+        f" ON CONFLICT(mmsi) DO UPDATE SET {set_clause}",
+        (mmsi, *values),
+    )
     conn.execute("UPDATE ships SET enriched=TRUE WHERE mmsi=?", (mmsi,))
     conn.commit()
 
 
 def _write_event_sql(conn: sqlite3.Connection, mmsi: int, event_type: str, detail: str) -> None:
     """Execute the INSERT for an event row without committing."""
-    from datetime import datetime
-
     conn.execute(
         "INSERT INTO events (mmsi, event_type, detail, created_at) VALUES (?, ?, ?, ?)",
-        (mmsi, event_type, detail, datetime.now().isoformat()),
+        (mmsi, event_type, detail, _now_iso()),
     )
 
 
@@ -267,11 +288,21 @@ def get_recent_events(conn: sqlite3.Connection, limit: int = 50) -> list[sqlite3
 
 def mark_event_displayed(conn: sqlite3.Connection, event_id: int) -> None:
     """Set displayed_at=now() for the given event id."""
-    from datetime import datetime
-
     conn.execute(
         "UPDATE events SET displayed_at=? WHERE id=?",
-        (datetime.now().isoformat(), event_id),
+        (_now_iso(), event_id),
+    )
+    conn.commit()
+
+
+def batch_mark_events_displayed(conn: sqlite3.Connection, event_ids: list[int]) -> None:
+    """Set displayed_at=now() for all given event ids in a single statement."""
+    if not event_ids:
+        return
+    placeholders = ",".join("?" * len(event_ids))
+    conn.execute(
+        f"UPDATE events SET displayed_at=? WHERE id IN ({placeholders})",  # noqa: S608
+        (_now_iso(), *event_ids),
     )
     conn.commit()
 
@@ -307,11 +338,9 @@ def get_visit_history(conn: sqlite3.Connection, mmsi: int) -> list[sqlite3.Row]:
 
 def record_visit(conn: sqlite3.Connection, mmsi: int) -> None:
     """Insert an open ship_visits row (departed_at NULL) and increment visit_count."""
-    from datetime import datetime
-
     conn.execute(
         "INSERT INTO ship_visits (mmsi, arrived_at) VALUES (?, ?)",
-        (mmsi, datetime.now().isoformat()),
+        (mmsi, _now_iso()),
     )
     conn.execute(
         "UPDATE ships SET visit_count = visit_count + 1 WHERE mmsi=?", (mmsi,)
@@ -321,8 +350,6 @@ def record_visit(conn: sqlite3.Connection, mmsi: int) -> None:
 
 def _close_visit_sql(conn: sqlite3.Connection, mmsi: int) -> None:
     """Execute the UPDATE for closing the most recent open visit without committing."""
-    from datetime import datetime
-
     conn.execute(
         """
         UPDATE ship_visits SET departed_at=?
@@ -332,7 +359,7 @@ def _close_visit_sql(conn: sqlite3.Connection, mmsi: int) -> None:
             ORDER BY id DESC LIMIT 1
         )
         """,
-        (datetime.now().isoformat(), mmsi),
+        (_now_iso(), mmsi),
     )
 
 
@@ -358,16 +385,9 @@ def increment_fetch_attempts(conn: sqlite3.Connection, mmsi: int) -> None:
     Creates the enrichment row if it does not exist. Use this on scrape failures
     instead of save_enrichment() to avoid prematurely setting enriched=TRUE.
     """
-    existing = conn.execute(
-        "SELECT mmsi FROM enrichment WHERE mmsi=?", (mmsi,)
-    ).fetchone()
-    if existing:
-        conn.execute(
-            "UPDATE enrichment SET fetch_attempts = fetch_attempts + 1 WHERE mmsi=?",
-            (mmsi,),
-        )
-    else:
-        conn.execute(
-            "INSERT INTO enrichment (mmsi, fetch_attempts) VALUES (?, 1)", (mmsi,)
-        )
+    conn.execute(
+        "INSERT INTO enrichment (mmsi, fetch_attempts) VALUES (?, 1)"
+        " ON CONFLICT(mmsi) DO UPDATE SET fetch_attempts = fetch_attempts + 1",
+        (mmsi,),
+    )
     conn.commit()
