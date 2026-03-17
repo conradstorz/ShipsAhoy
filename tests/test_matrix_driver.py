@@ -107,3 +107,83 @@ def test_preview_driver_clear_resets_to_black():
     frame = d.get_current_frame(elapsed_sec=0.0)
     for row in frame:
         assert all(px == (0, 0, 0) for px in row)
+
+
+# --- ESP32Driver ---
+
+import logging
+import struct
+import unittest.mock as mock
+from ships_ahoy.matrix_driver import ESP32Driver
+from ships_ahoy.esp32_protocol import (
+    CMD_SCROLL, CMD_STATIC, CMD_CLEAR, CMD_FRAME,
+    ACK, NACK, encode_text, GLYPH_WIDTH_PX,
+)
+
+def _make_driver(port="/dev/ttyS0", read_byte=ACK):
+    """Return an ESP32Driver with a mock serial port."""
+    with mock.patch("serial.Serial") as MockSerial:
+        instance = MockSerial.return_value
+        instance.read.return_value = bytes([read_byte])
+        driver = ESP32Driver(port=port, ack_timeout_sec=0.05)
+        driver._serial = instance
+        driver._connected = True
+    return driver, instance
+
+def test_esp32driver_connected_after_successful_open():
+    with mock.patch("serial.Serial"):
+        d = ESP32Driver(port="/dev/ttyS0")
+    assert d._connected
+
+def test_esp32driver_not_connected_on_serial_error():
+    with mock.patch("serial.Serial", side_effect=Exception("no port")):
+        d = ESP32Driver(port="/dev/ttyS0")
+    assert not d._connected
+
+def test_esp32driver_scroll_text_sends_packet():
+    driver, serial_mock = _make_driver(read_byte=ACK)
+    with mock.patch("time.sleep"):
+        driver.scroll_text("HELLO", speed_px_per_sec=40.0)
+    assert serial_mock.write.called
+    pkt = serial_mock.write.call_args[0][0]
+    assert pkt[0] == 0xAA        # start byte
+    assert pkt[1] == CMD_SCROLL  # command
+
+def test_esp32driver_scroll_text_sleeps_estimated_duration():
+    driver, serial_mock = _make_driver(read_byte=ACK)
+    text = "HI"
+    expected_duration = len(encode_text(text)) * GLYPH_WIDTH_PX / 40.0
+    sleep_calls = []
+    with mock.patch("time.sleep", side_effect=lambda t: sleep_calls.append(t)):
+        driver.scroll_text(text, speed_px_per_sec=40.0)
+    total_sleep = sum(sleep_calls)
+    assert abs(total_sleep - expected_duration) < 0.01
+
+def test_esp32driver_returns_normally_on_nack(caplog):
+    driver, serial_mock = _make_driver(read_byte=NACK)
+    with mock.patch("time.sleep"):
+        with caplog.at_level(logging.WARNING):
+            driver.scroll_text("HI", speed_px_per_sec=40.0)
+    assert any("NACK" in r.message or "nack" in r.message.lower() for r in caplog.records)
+
+def test_esp32driver_returns_normally_when_disconnected():
+    with mock.patch("serial.Serial", side_effect=Exception("no port")):
+        d = ESP32Driver(port="/dev/ttyS0", ack_timeout_sec=0.05)
+    # Should not raise even with no connection
+    with mock.patch("time.sleep"):
+        d.scroll_text("HI", speed_px_per_sec=40.0)
+        d.show_static("idle", duration_sec=0.1)
+        d.clear()
+
+def test_esp32driver_clear_sends_clear_command():
+    driver, serial_mock = _make_driver(read_byte=ACK)
+    driver.clear()
+    pkt = serial_mock.write.call_args[0][0]
+    assert pkt[1] == CMD_CLEAR
+
+def test_esp32driver_show_static_sleeps_duration():
+    driver, serial_mock = _make_driver(read_byte=ACK)
+    sleep_calls = []
+    with mock.patch("time.sleep", side_effect=lambda t: sleep_calls.append(t)):
+        driver.show_static("idle", duration_sec=2.0)
+    assert abs(sum(sleep_calls) - 2.0) < 0.01
