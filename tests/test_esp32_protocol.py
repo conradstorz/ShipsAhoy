@@ -21,7 +21,9 @@ def test_crc8_zero():
     assert crc8(b'\x00') == 0x00
 
 def test_crc8_known_vector():
-    # CRC8/MAXIM (poly 0x31, init 0x00): crc8([0x01]) == 0x31
+    # Non-reflected CRC8: poly=0x31, init=0x00, refin=False, refout=False.
+    # NOT the same as CRC8/MAXIM-DOW (which uses refin=True, refout=True).
+    # Pinned value verified against the implementation.
     assert crc8(b'\x01') == 0x31
 
 def test_crc8_multi_byte():
