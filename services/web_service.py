@@ -19,10 +19,12 @@ Usage::
 """
 
 import argparse
+import json
 import logging
 import os
+import time
 
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, Response, render_template, request, redirect, url_for
 
 from ships_ahoy.config import Config
 from ships_ahoy.db import (
@@ -33,8 +35,10 @@ from ships_ahoy.db import (
     get_ships_in_range,
     get_recent_events,
     get_visit_history,
+    get_display_state,
 )
 from ships_ahoy.distance import distance_info
+from ships_ahoy.matrix_driver import PreviewDriver, ESP32_DISPLAY_WIDTH, ESP32_DISPLAY_HEIGHT
 from ships_ahoy.service_utils import DEFAULT_DB_PATH, configure_logging
 
 logger = logging.getLogger(__name__)
@@ -46,6 +50,7 @@ app = Flask(__name__, template_folder="../templates", static_folder="../static")
 # Module-level connection — set in main() before app.run()
 _conn = None
 _cfg = None
+_db_path = DEFAULT_DB_PATH  # set in main(); used by SSE generator
 
 
 def _get_conn():
@@ -138,6 +143,76 @@ def events():
     return render_template("events.html", events=event_list)
 
 
+@app.route("/ticker/preview")
+def ticker_preview():
+    """Server-Sent Events stream of rendered ticker frames at ~30 FPS.
+
+    Each SSE client opens its own SQLite connection and PreviewDriver instance.
+    The generator polls display_state every ~250 ms for content updates,
+    and ticks the PreviewDriver at ~30 FPS.
+    """
+    max_frames = request.args.get("_max_frames", type=int)  # test hook
+
+    def generate():
+        import sqlite3
+        conn = sqlite3.connect(_db_path)
+        conn.row_factory = sqlite3.Row
+        preview = PreviewDriver(
+            display_width=ESP32_DISPLAY_WIDTH,
+            display_height=ESP32_DISPLAY_HEIGHT,
+        )
+        last_updated_at = None
+        last_frame_time = time.monotonic()
+        frames_sent = 0
+        poll_counter = 0
+
+        try:
+            while True:
+                # Poll display_state every ~250 ms (every 8 frames at 30 FPS)
+                poll_counter += 1
+                if poll_counter >= 8:
+                    poll_counter = 0
+                    row = get_display_state(conn)
+                    if row and row["updated_at"] != last_updated_at:
+                        last_updated_at = row["updated_at"]
+                        if row["mode"] == "scroll":
+                            preview.scroll_text(row["text"] or "", row["speed"] or 40.0)
+                        else:
+                            preview.show_static(
+                                row["text"] or "",
+                                (row["duration_ms"] or 2000) / 1000.0,
+                            )
+
+                # Advance scroll and get frame
+                now = time.monotonic()
+                elapsed = now - last_frame_time
+                last_frame_time = now
+                frame = preview.get_current_frame(elapsed_sec=elapsed)
+
+                # Flatten row-major and emit
+                flat = [list(px) for row in frame for px in row]
+                data = json.dumps({
+                    "pixels": flat,
+                    "width": ESP32_DISPLAY_WIDTH,
+                    "height": ESP32_DISPLAY_HEIGHT,
+                })
+                yield f"data: {data}\n\n"
+
+                frames_sent += 1
+                if max_frames is not None and frames_sent >= max_frames:
+                    break
+
+                time.sleep(1 / 30)
+        finally:
+            conn.close()
+
+    return Response(
+        generate(),
+        content_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.route("/settings", methods=["GET"])
 def settings_get():
     """Settings form pre-populated from the settings table."""
@@ -200,18 +275,19 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     """Service entry point. Initialises DB connection then starts Flask."""
-    global _conn, _cfg
+    global _conn, _cfg, _db_path
     args = _build_parser().parse_args()
     configure_logging(args.verbose)
 
+    _db_path = args.db
     _conn = init_db(args.db)
     _cfg = Config(_conn)
 
     logger.info("Web service starting on port %d", args.port)
-    # threaded=False enforces single-thread access to the module-level SQLite
-    # connection. SQLite connections must not be shared across threads.
-    # For multi-worker deployments, open a per-request connection instead.
-    app.run(host="0.0.0.0", port=args.port, debug=False, threaded=False)
+    # threaded=True allows SSE connections to stream while other routes remain
+    # responsive. Each SSE generator opens its own SQLite connection (WAL mode
+    # supports concurrent reads) so _conn is not accessed from SSE threads.
+    app.run(host="0.0.0.0", port=args.port, debug=False, threaded=True)
 
 
 if __name__ == "__main__":
