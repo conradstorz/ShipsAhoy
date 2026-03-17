@@ -5,8 +5,9 @@ No I/O — pure data transformation, fully testable without hardware.
 Wire format per packet:
     [0xAA] [CMD] [LEN_HI] [LEN_LO] [PAYLOAD ...] [CRC8]
 
-CRC8 covers CMD + LEN_HI + LEN_LO + PAYLOAD using CRC8/MAXIM
-(Dallas 1-Wire), polynomial 0x31, initial value 0x00, no reflection.
+CRC8 covers CMD + LEN_HI + LEN_LO + PAYLOAD using
+CRC8 polynomial 0x31, initial value 0x00, no input/output reflection
+(a non-standard variant; the ESP32 firmware must implement the same variant).
 """
 
 import logging
@@ -39,7 +40,12 @@ SPRITES: dict[str, int] = {
 
 
 def crc8(data: bytes) -> int:
-    """CRC8/MAXIM (Dallas 1-Wire): polynomial 0x31, init 0x00, no reflection."""
+    """CRC8: polynomial 0x31, init 0x00, no bit reflection.
+
+    This is a non-reflected CRC8 variant — not the same as CRC8/MAXIM-DOW
+    (which uses refin=True, refout=True). The ESP32 firmware must implement
+    this exact variant for packet integrity checks to succeed.
+    """
     crc = 0
     for byte in data:
         crc ^= byte
@@ -54,9 +60,11 @@ def crc8(data: bytes) -> int:
 def encode_text(text: str) -> bytes:
     """Substitute known SPRITES with \\x1E + ID escapes; strip all other non-ASCII.
 
-    Guarantees single-byte-per-glyph output so len() gives a correct
-    glyph count for scroll-duration estimation.
-    Unknown non-ASCII characters are stripped and logged at DEBUG.
+    Each ASCII character encodes as one byte; each known sprite encodes as
+    two bytes (escape byte 0x1E followed by sprite ID). Callers computing
+    scroll duration should use the plan-specified formula; they must not
+    assume len() gives a direct glyph count when sprites are present.
+    Unknown non-ASCII characters are stripped and logged at DEBUG level.
     """
     result = bytearray()
     for ch in text:

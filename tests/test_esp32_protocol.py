@@ -25,10 +25,10 @@ def test_crc8_known_vector():
     assert crc8(b'\x01') == 0x31
 
 def test_crc8_multi_byte():
-    # Verify CRC8 is not the same as XOR (would be 0x00 for equal bytes)
-    result = crc8(b'\xAA\xAA')
-    assert isinstance(result, int)
-    assert 0 <= result <= 255
+    # Computed value for this specific non-reflected CRC8 variant (poly=0x31, init=0x00)
+    assert crc8(b'\xAA\xAA') == 0x36
+    # Also verify it differs from naive XOR (0x00 for equal bytes)
+    assert crc8(b'\xAA\xAA') != 0x00
 
 
 def test_encode_text_ascii_passthrough():
