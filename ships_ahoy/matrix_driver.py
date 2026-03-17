@@ -145,12 +145,11 @@ class PreviewDriver(MatrixDriver):
         self._scroll_offset = 0.0
         self._speed = 0.0
 
-    def get_current_frame(self, elapsed_sec: float):
+    def get_current_frame(self, elapsed_sec: float) -> list:
         """Advance scroll by *elapsed_sec* × speed and return the current frame.
 
         Returns a PixelGrid: list[list[RGB]], height rows × display_width cols.
         """
-        from ships_ahoy.renderer import scroll_frame
         self._scroll_offset += elapsed_sec * self._speed
         offset = int(self._scroll_offset)
-        return scroll_frame(self._pixels, offset=offset, display_width=self._display_width)
+        return self._scroll_frame(self._pixels, offset=offset, display_width=self._display_width)
