@@ -26,6 +26,8 @@ from ships_ahoy.db import (
     record_visit,
     close_visit,
     mark_ship_departed,
+    write_display_state,
+    get_display_state,
 )
 from ships_ahoy.events import EventType
 from ships_ahoy.ship_tracker import ShipInfo
@@ -568,3 +570,38 @@ def test_batch_mark_events_displayed_marks_all(conn):
 def test_batch_mark_events_displayed_no_op_on_empty_list(conn):
     # Should not raise
     batch_mark_events_displayed(conn, [])
+
+
+# ---------------------------------------------------------------------------
+# write_display_state / get_display_state
+# ---------------------------------------------------------------------------
+
+def test_get_display_state_returns_none_on_empty_db(conn):
+    assert get_display_state(conn) is None
+
+def test_write_display_state_creates_readable_row(conn):
+    write_display_state(conn, text="CARGO arrived", speed=40.0, mode="scroll", duration_ms=0)
+    row = get_display_state(conn)
+    assert row is not None
+    assert row["text"] == "CARGO arrived"
+    assert row["mode"] == "scroll"
+    assert abs(row["speed"] - 40.0) < 0.001
+
+def test_write_display_state_is_single_row(conn):
+    write_display_state(conn, text="first", speed=40.0, mode="scroll", duration_ms=0)
+    write_display_state(conn, text="second", speed=40.0, mode="scroll", duration_ms=0)
+    count = conn.execute("SELECT COUNT(*) FROM display_state").fetchone()[0]
+    assert count == 1
+
+def test_write_display_state_overwrites_previous(conn):
+    write_display_state(conn, text="old", speed=40.0, mode="scroll", duration_ms=0)
+    write_display_state(conn, text="new", speed=60.0, mode="static", duration_ms=2000)
+    row = get_display_state(conn)
+    assert row["text"] == "new"
+    assert row["mode"] == "static"
+    assert row["duration_ms"] == 2000
+
+def test_write_display_state_sets_updated_at(conn):
+    write_display_state(conn, text="x", speed=40.0, mode="scroll", duration_ms=0)
+    row = get_display_state(conn)
+    assert row["updated_at"] is not None

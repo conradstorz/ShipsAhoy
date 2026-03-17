@@ -88,6 +88,17 @@ CREATE TABLE IF NOT EXISTS ship_visits (
 )
 """
 
+_CREATE_DISPLAY_STATE = """
+CREATE TABLE IF NOT EXISTS display_state (
+    id           INTEGER PRIMARY KEY CHECK (id = 1),
+    text         TEXT,
+    speed        REAL,
+    mode         TEXT,
+    duration_ms  INTEGER,
+    updated_at   DATETIME
+)
+"""
+
 _DEFAULT_SETTINGS = [
     ("home_lat", None),
     ("home_lon", None),
@@ -96,6 +107,7 @@ _DEFAULT_SETTINGS = [
     ("stale_ship_hours", "1"),
     ("enrichment_delay_sec", "10"),
     ("enrichment_max_attempts", "3"),
+    ("esp32_port", ""),
 ]
 
 # Columns that save_enrichment is permitted to write — fixed literal set so the
@@ -132,6 +144,7 @@ def init_db(path: str) -> sqlite3.Connection:
     conn.execute(_CREATE_ENRICHMENT)
     conn.execute(_CREATE_SETTINGS)
     conn.execute(_CREATE_SHIP_VISITS)
+    conn.execute(_CREATE_DISPLAY_STATE)
     conn.executemany(
         "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
         _DEFAULT_SETTINGS,
@@ -391,3 +404,29 @@ def increment_fetch_attempts(conn: sqlite3.Connection, mmsi: int) -> None:
         (mmsi,),
     )
     conn.commit()
+
+
+def write_display_state(
+    conn: sqlite3.Connection,
+    text: str,
+    speed: float,
+    mode: str,
+    duration_ms: int,
+) -> None:
+    """Write current display content to the single-row display_state table.
+
+    Uses INSERT OR REPLACE to guarantee exactly one row exists at all times.
+    """
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO display_state (id, text, speed, mode, duration_ms, updated_at)
+        VALUES (1, ?, ?, ?, ?, ?)
+        """,
+        (text, speed, mode, duration_ms, _now_iso()),
+    )
+    conn.commit()
+
+
+def get_display_state(conn: sqlite3.Connection) -> Optional[sqlite3.Row]:
+    """Return the single display_state row, or None if not yet written."""
+    return conn.execute("SELECT * FROM display_state").fetchone()
