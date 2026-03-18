@@ -76,14 +76,16 @@ Packet format (defined in `ships_ahoy/esp32_protocol.py` on the Pi side):
 
 | CMD | Value | Payload |
 |-----|-------|---------|
-| CMD_SCROLL | 0x01 | `[speed_hi][speed_lo][r][g][b][text bytes...]` — speed in px/sec as uint16 BE |
-| CMD_STATIC | 0x02 | `[dur_hi][dur_mi][dur_lo_hi][dur_lo][r][g][b][text bytes...]` — duration uint32 BE ms |
-| CMD_FRAME | 0x03 | `[w_hi][w_lo][h_hi][h_lo][RGB pixels row-major]` |
-| CMD_CLEAR | 0x04 | empty |
-| CMD_PING | 0x05 | empty |
+| CMD_SCROLL | 0x01 | `[speed_hi][speed_lo][r][g][b][text bytes...]` — speed uint16 BE px/sec (clamped to ≥1); text is escape-encoded (see Sprite Escapes below) |
+| CMD_STATIC | 0x02 | `[duration_ms: uint32 BE, 4 bytes][r][g][b][text bytes...]` — duration in milliseconds; text is escape-encoded |
+| CMD_FRAME | 0x03 | `[w_hi][w_lo][h_hi][h_lo][pixels row-major]` — pixels are R,G,B bytes in that order (FastLED handles GRB reordering); validate `w*h*3 == remaining payload bytes`; clamp/crop to 320×8 if oversized |
+| CMD_CLEAR | 0x04 | empty (zero-length payload; CRC still computed over `[0x04, 0x00, 0x00]`) |
+| CMD_PING | 0x05 | empty (zero-length payload; CRC still computed over `[0x05, 0x00, 0x00]`) |
 | CMD_BRIGHTNESS | 0x06 | `[0–255]` |
 
-**ACK/NACK:** single byte reply after each packet. ACK = `0x00`, NACK = `0xFF`.
+**ACK/NACK semantics:** `uart_task` sends ACK (`0x00`) immediately after CRC validation passes, before pushing to the display queue. ACK means "received and CRC valid", not "displayed". NACK (`0xFF`) means CRC failed or parse error — Pi may retransmit. The Pi's ACK timeout is 100ms; firmware must send ACK/NACK within that window.
+
+**CRC over zero-payload packets:** for CMD_CLEAR and CMD_PING, CRC is computed over the 3-byte sequence `[CMD, 0x00, 0x00]` (no payload bytes). Do not skip CRC for empty packets.
 
 ### Parser State Machine
 
@@ -106,7 +108,7 @@ The 5×8 bitmap font is shared between Pi (`ships_ahoy/renderer.py`) and firmwar
 - Column-major encoding: 5 bytes per glyph, bit 0 = top row, bit 7 = bottom row
 - 1 blank column spacing between glyphs → 6 px per character
 
-**Sprite escapes:** the Pi's `encode_text()` maps known emoji to `\x1E` + sprite ID. The firmware detects `\x1E` and substitutes an 8×8 sprite bitmap from `sprites.h`.
+**Sprite escapes:** the Pi's `encode_text()` encodes known emoji as a two-byte escape sequence: escape byte `0x1E` (ASCII Record Separator) followed by a one-byte sprite ID. The firmware detects `0x1E` in the text payload and substitutes the corresponding 8×8 sprite bitmap from `sprites.h`. All text payloads in CMD_SCROLL and CMD_STATIC use this encoding — plain ASCII characters pass through unchanged; only emoji are escaped.
 
 | Sprite ID | Emoji |
 |-----------|-------|
