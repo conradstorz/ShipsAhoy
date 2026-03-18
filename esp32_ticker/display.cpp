@@ -11,11 +11,16 @@ static void display_task(void* pvParameters) {
 
     Serial.println("[display] display_task started on Core 1");
 
-    // Current display state
-    DisplayMode current_mode = MODE_CLEAR;
-    float       scroll_offset  = 0.0f;
-    float       scroll_speed   = 40.0f;  // px/sec
-    uint8_t     color_r = 255, color_g = 255, color_b = 255;
+    // Current display state — start with a standby scroll so the display
+    // shows it is powered on before the Pi sends any commands.
+    static const uint8_t STANDBY_TEXT[] =
+        "  \x1E\x02 ShipsAhoy \x1E\x01  ";  // ship emoji, name, anchor emoji
+    build_col_map(STANDBY_TEXT, sizeof(STANDBY_TEXT) - 1);
+
+    DisplayMode current_mode = MODE_SCROLL;
+    float       scroll_offset  = -(float)DISPLAY_WIDTH;  // enter from right
+    float       scroll_speed   = 30.0f;  // px/sec — gentle standby pace
+    uint8_t     color_r = 0, color_g = 180, color_b = 180;  // dim cyan
     uint32_t    static_until_ms = 0;
 
     // Frame timing
