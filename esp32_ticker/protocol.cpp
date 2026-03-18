@@ -145,7 +145,7 @@ void uart_task(void* pvParameters) {
                     valid = false; break;
                 }
                 uint32_t expected_px = (uint32_t)c.frame_w * c.frame_h * 3;
-                uint16_t actual_px   = payload_len - 4;
+                uint32_t actual_px   = payload_len - 4;
                 if (expected_px != actual_px) { valid = false; break; }
                 c.mode = MODE_FRAME;
                 memcpy(c.frame, payload_buf + 4, min((uint32_t)MAX_PAYLOAD, expected_px));
