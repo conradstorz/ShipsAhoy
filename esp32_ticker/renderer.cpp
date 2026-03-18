@@ -15,11 +15,11 @@ void build_col_map(const uint8_t* text, uint16_t len) {
         uint8_t b = text[i++];
 
         if (b == SPRITE_ESCAPE && i < len) {
-            // Sprite escape: next byte is sprite ID
+            // Sprite escape: next byte is sprite ID.
+            // If SPRITE_ESCAPE is the last byte (i == len), the condition fails
+            // and 0x1E falls through to the else-branch as a blank glyph — safe.
             uint8_t id = text[i++];
-            if (!sprite_get_cols(id, cols)) {
-                memset(cols, 0, 5);
-            }
+            sprite_get_cols(id, cols);  // zeroes cols on unknown ID
         } else if (b >= 32 && b <= 126) {
             font_get_cols((char)b, cols);
         } else {
