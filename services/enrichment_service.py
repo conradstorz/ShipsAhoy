@@ -225,7 +225,8 @@ def _enrich_ship(mmsi: int, photos_dir: Path) -> Optional[dict]:
             if result:
                 return result
         except Exception:
-            logger.debug("Scraper %s failed for MMSI %d", scraper.__name__, mmsi)
+            logger.debug("Scraper %s failed for MMSI %d",
+                         getattr(scraper, "__name__", repr(scraper)), mmsi)
     return None
 
 
