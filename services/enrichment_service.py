@@ -200,6 +200,23 @@ def _download_photo(photo_url: str, mmsi: int, photos_dir: Path) -> Optional[str
     return str(dest)
 
 
+def _process_one_ship(conn, mmsi: int, photos_dir: Path) -> None:
+    """Enrich one ship: try scrapers, save result or increment fetch attempts."""
+    data = _enrich_ship(mmsi, photos_dir)
+    if data:
+        if data.get("photo_url"):
+            local_path = _download_photo(data["photo_url"], mmsi, photos_dir)
+            if local_path:
+                data["photo_path"] = local_path
+        save_enrichment(conn, mmsi, data)
+        write_event(conn, mmsi, EventType.ENRICHED,
+                    f"New enrichment data for MMSI {mmsi}")
+        logger.info("Enriched MMSI %d from %s", mmsi, data.get("source"))
+    else:
+        increment_fetch_attempts(conn, mmsi)
+        logger.debug("No data found for MMSI %d", mmsi)
+
+
 def _enrich_ship(mmsi: int, photos_dir: Path) -> Optional[dict]:
     """Try each scrape source in priority order. Return first successful result, or None."""
     for scraper in (_scrape_shipxplorer, _scrape_marinetraffic, _scrape_itu):
@@ -237,19 +254,7 @@ def main() -> None:
 
             for mmsi in mmsi_list:
                 try:
-                    data = _enrich_ship(mmsi, photos_dir)
-                    if data:
-                        if data.get("photo_url"):
-                            local_path = _download_photo(data["photo_url"], mmsi, photos_dir)
-                            if local_path:
-                                data["photo_path"] = local_path
-                        save_enrichment(conn, mmsi, data)
-                        write_event(conn, mmsi, EventType.ENRICHED,
-                                    f"New enrichment data for MMSI {mmsi}")
-                        logger.info("Enriched MMSI %d from %s", mmsi, data.get("source"))
-                    else:
-                        increment_fetch_attempts(conn, mmsi)
-                        logger.debug("No data found for MMSI %d", mmsi)
+                    _process_one_ship(conn, mmsi, photos_dir)
                 except Exception:
                     logger.exception("Error enriching MMSI %d", mmsi)
 
