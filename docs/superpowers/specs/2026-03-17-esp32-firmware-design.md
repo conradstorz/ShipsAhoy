@@ -78,7 +78,7 @@ Packet format (defined in `ships_ahoy/esp32_protocol.py` on the Pi side):
 |-----|-------|---------|
 | CMD_SCROLL | 0x01 | `[speed_hi][speed_lo][r][g][b][text bytes...]` — speed uint16 BE px/sec (clamped to ≥1); text is escape-encoded (see Sprite Escapes below) |
 | CMD_STATIC | 0x02 | `[duration_ms: uint32 BE, 4 bytes][r][g][b][text bytes...]` — duration in milliseconds; text is escape-encoded |
-| CMD_FRAME | 0x03 | `[w_hi][w_lo][h_hi][h_lo][pixels row-major]` — pixels are R,G,B bytes in that order (FastLED handles GRB reordering); validate `w*h*3 == remaining payload bytes`; clamp/crop to 320×8 if oversized |
+| CMD_FRAME | 0x03 | `[w_hi][w_lo][h_hi][h_lo][pixels row-major]` — pixels are R,G,B bytes in that order (FastLED handles GRB reordering); validate `w*h*3 == remaining payload bytes`; NACK and reject if `w > 320` or `h > 8` (cropping would corrupt the row stride) |
 | CMD_CLEAR | 0x04 | empty (zero-length payload; CRC still computed over `[0x04, 0x00, 0x00]`) |
 | CMD_PING | 0x05 | empty (zero-length payload; CRC still computed over `[0x05, 0x00, 0x00]`) |
 | CMD_BRIGHTNESS | 0x06 | `[0–255]` |
