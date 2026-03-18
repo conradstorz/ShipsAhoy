@@ -145,6 +145,26 @@ def init_db(path: str) -> sqlite3.Connection:
     conn.execute(_CREATE_SETTINGS)
     conn.execute(_CREATE_SHIP_VISITS)
     conn.execute(_CREATE_DISPLAY_STATE)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_ships_last_seen ON ships (last_seen)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_ships_enriched ON ships (enriched)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_ships_position ON ships (latitude, longitude)"
+        " WHERE latitude IS NOT NULL AND longitude IS NOT NULL"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_events_pending ON events (displayed_at, created_at)"
+        " WHERE displayed_at IS NULL"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_events_recent ON events (created_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_visits_mmsi ON ship_visits (mmsi)"
+    )
     conn.executemany(
         "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
         _DEFAULT_SETTINGS,

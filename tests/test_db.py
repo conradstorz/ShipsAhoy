@@ -605,3 +605,20 @@ def test_write_display_state_sets_updated_at(conn):
     write_display_state(conn, text="x", speed=40.0, mode="scroll", duration_ms=0)
     row = get_display_state(conn)
     assert row["updated_at"] is not None
+
+
+def test_indexes_exist(conn):
+    """All expected indexes must be created by init_db()."""
+    names = {row[0] for row in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='index'"
+    ).fetchall()}
+    expected = [
+        "idx_ships_last_seen",
+        "idx_ships_enriched",
+        "idx_ships_position",
+        "idx_events_pending",
+        "idx_events_recent",
+        "idx_visits_mmsi",
+    ]
+    for idx in expected:
+        assert idx in names, f"Missing index: {idx}"
