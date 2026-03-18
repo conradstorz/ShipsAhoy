@@ -19,7 +19,7 @@ Implement Arduino firmware for an ESP32-S3-WROOM-1 that receives ship ticker com
 | Display | 10× WS2812B 5V 32×8 panels, chained left-to-right |
 | Total pixels | 320 wide × 8 tall = 2560 LEDs |
 | LED order | GRB (WS2812B standard) |
-| Data pin | GPIO 48 (configurable in `config.h`) |
+| Data pin | GPIO 38 (configurable in `config.h`; GPIO 48 is onboard RGB on devkits) |
 | UART pins | Serial2: GPIO 17 (TX→Pi RX), GPIO 18 (RX←Pi TX) |
 | Baud rate | 921,600 |
 
@@ -49,7 +49,7 @@ Pi UART TX ──► Serial2 RX
              - scroll animation at 30 FPS
              - FastLED.show()
                    │
-              GPIO 48 ──► WS2812B chain
+              GPIO 38 ──► WS2812B chain
 ```
 
 ### Core 0 — `uart_task`
@@ -131,7 +131,7 @@ The 5×8 bitmap font is shared between Pi (`ships_ahoy/renderer.py`) and firmwar
 
 ```cpp
 #define NUM_LEDS     2560
-#define DATA_PIN     48
+#define DATA_PIN     38
 #define LED_TYPE     WS2812B
 #define COLOR_ORDER  GRB
 ```
