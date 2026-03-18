@@ -26,17 +26,19 @@ def client(tmp_path):
         ws._db_path = db_path
         ws.app.config["TESTING"] = True
         with ws.app.test_client() as c:
-            yield c
+            yield c, ws._conn
 
 def test_ticker_preview_content_type(client):
     """GET /ticker/preview returns text/event-stream."""
-    resp = client.get("/ticker/preview", query_string={"_max_frames": "1"})
+    c, conn = client
+    resp = c.get("/ticker/preview", query_string={"_max_frames": "1"})
     assert "text/event-stream" in resp.content_type
 
 def test_ticker_preview_returns_data_line(client):
     """SSE stream emits at least one data: line with valid JSON."""
     import json
-    resp = client.get("/ticker/preview", query_string={"_max_frames": "1"})
+    c, conn = client
+    resp = c.get("/ticker/preview", query_string={"_max_frames": "1"})
     body = resp.data.decode()
     for line in body.splitlines():
         if line.startswith("data:"):
@@ -46,3 +48,71 @@ def test_ticker_preview_returns_data_line(client):
             assert "height" in payload
             return
     pytest.fail("No data: line found in SSE stream")
+
+
+from datetime import datetime
+from ships_ahoy.db import upsert_ship
+from ships_ahoy.ship_tracker import ShipInfo
+
+
+def _make_ship(mmsi=123456789, name="MV Web Test"):
+    return ShipInfo(mmsi=mmsi, name=name, last_seen=datetime.now())
+
+
+def test_index_returns_200(client):
+    c, conn = client
+    resp = c.get("/")
+    assert resp.status_code == 200
+
+
+def test_index_shows_ship_name(client):
+    c, conn = client
+    upsert_ship(conn, _make_ship(name="MV Visible Ship"))
+    resp = c.get("/")
+    assert b"MV Visible Ship" in resp.data
+
+
+def test_ship_detail_returns_200(client):
+    c, conn = client
+    upsert_ship(conn, _make_ship(mmsi=555000001))
+    resp = c.get("/ship/555000001")
+    assert resp.status_code == 200
+
+
+def test_ship_detail_404_for_unknown(client):
+    c, conn = client
+    resp = c.get("/ship/9999999")
+    assert resp.status_code == 404
+
+
+def test_events_returns_200(client):
+    c, conn = client
+    resp = c.get("/events")
+    assert resp.status_code == 200
+
+
+def test_settings_get_returns_200(client):
+    c, conn = client
+    resp = c.get("/settings")
+    assert resp.status_code == 200
+
+
+def test_settings_post_saves_values(client):
+    c, conn = client
+    resp = c.post("/settings", data={"distance_km": "25.0"})
+    assert resp.status_code == 302  # redirect
+
+    from ships_ahoy.config import Config
+    cfg = Config(conn)
+    assert cfg.distance_km == 25.0
+
+
+def test_settings_post_ignores_invalid_float(client):
+    c, conn = client
+    from ships_ahoy.config import Config
+    original = Config(conn).distance_km
+
+    resp = c.post("/settings", data={"distance_km": "notanumber"})
+    assert resp.status_code == 302  # no crash
+
+    assert Config(conn).distance_km == original
