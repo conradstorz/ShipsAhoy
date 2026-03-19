@@ -1,11 +1,12 @@
 [Unit]
-Description=ShipsAhoy Enrichment Service
+Description=ShipsAhoy ship enrichment service
 After=network.target
 
 [Service]
-User=pi
-WorkingDirectory=/home/pi/ShipsAhoy
-ExecStart=uv run python services/enrichment_service.py --db /home/pi/ShipsAhoy/ships.db --photos-dir /home/pi/ShipsAhoy/static/photos
+Type=simple
+User=__USER__
+WorkingDirectory=__REPO_DIR__
+ExecStart=__REPO_DIR__/.venv/bin/python __REPO_DIR__/services/enrichment_service.py --db __REPO_DIR__/ships.db --photos-dir __REPO_DIR__/static/photos
 Restart=always
 RestartSec=5
 StandardOutput=journal

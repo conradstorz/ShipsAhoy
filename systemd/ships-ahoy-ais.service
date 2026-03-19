@@ -1,11 +1,13 @@
 [Unit]
-Description=ShipsAhoy AIS Receiver
-After=network.target
+Description=ShipsAhoy AIS ingest service
+After=network.target ships-ahoy-rtl-ais.service
+Wants=ships-ahoy-rtl-ais.service
 
 [Service]
-User=pi
-WorkingDirectory=/home/pi/ShipsAhoy
-ExecStart=uv run python services/ais_service.py --db /home/pi/ShipsAhoy/ships.db
+Type=simple
+User=__USER__
+WorkingDirectory=__REPO_DIR__
+ExecStart=__REPO_DIR__/.venv/bin/python __REPO_DIR__/services/ais_service.py --db __REPO_DIR__/ships.db
 Restart=always
 RestartSec=5
 StandardOutput=journal

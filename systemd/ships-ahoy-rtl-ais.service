@@ -1,12 +1,11 @@
 [Unit]
-Description=ShipsAhoy web UI
+Description=ShipsAhoy RTL-AIS SDR receiver
 After=network.target
 
 [Service]
 Type=simple
 User=__USER__
-WorkingDirectory=__REPO_DIR__
-ExecStart=__REPO_DIR__/.venv/bin/python __REPO_DIR__/services/web_service.py --db __REPO_DIR__/ships.db --port 5000
+ExecStart=__RTLAIS_BIN__ -n -T -p 0 -d 0
 Restart=always
 RestartSec=5
 StandardOutput=journal
