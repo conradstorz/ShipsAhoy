@@ -32,7 +32,13 @@ chmod +x install.sh
 ./install.sh
 ```
 
-The script detects its own location with `REPO_DIR="$(cd "$(dirname "$0")" && pwd)"` so it works regardless of where the repo was cloned.
+The script detects its own location with:
+
+```bash
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+```
+
+So it works regardless of where the repo was cloned.
 
 ---
 
@@ -40,16 +46,18 @@ The script detects its own location with `REPO_DIR="$(cd "$(dirname "$0")" && pw
 
 ### Phase 1 — Preflight Checks
 
-Runs before any system changes are made. Aborts with a clear error message if any check fails.
+Runs before any system changes are made. Aborts with a clear error message if any hard check fails. The RTL-SDR check is a warning only.
 
-| Check | Pass condition | Failure message |
-|-------|---------------|-----------------|
-| Not running as root | `$EUID != 0` | "Run as your normal user, not root. sudo will be called internally." |
-| Linux OS | `uname` returns `Linux` | "This installer is for Linux / Raspberry Pi OS only." |
-| sudo available | `sudo -n true` or user confirms sudo works | "sudo is required. Make sure your user has sudo privileges." |
-| RTL-SDR dongle | `lsusb` contains `0bda` (Realtek vendor ID) | Warning only — prints "No RTL-SDR dongle detected. Continuing anyway; plug it in before starting services." |
+| Check | Method | On failure |
+|-------|--------|-----------|
+| Not running as root | `[ "$EUID" -ne 0 ]` | Abort: "Run as your normal user, not root." |
+| Linux OS | `uname -s` returns `Linux` | Abort: "This installer is for Linux / Raspberry Pi OS only." |
+| sudo available | `sudo -v` (prompts for password; caches credentials for subsequent sudo calls) | Abort: "sudo is required. Make sure your user has sudo privileges." |
+| RTL-SDR dongle | `lsusb \| grep -q "0bda:2838" \|\| true` | Warning only: "No RTL-SDR dongle detected. Plug it in before starting services." |
 
-The RTL-SDR check is a warning, not an abort, since the dongle may be plugged in after install.
+The RTL-SDR check uses `|| true` to prevent `set -e` from aborting the script when no dongle is found — grep exits 1 on no match, which would otherwise trigger an immediate exit.
+
+`sudo -v` is used instead of `sudo -n true` because `-n` fails non-interactively if credentials are not already cached.
 
 ---
 
@@ -60,14 +68,16 @@ sudo apt-get update
 sudo apt-get install -y rtl-ais curl
 ```
 
-Install `uv` if not already present:
+Install `uv` if not already present, then make it available for the rest of the script without restarting the shell:
 
 ```bash
 if ! command -v uv &>/dev/null; then
     curl -LsSf https://astral.sh/uv/install.sh | sh
-    source "$HOME/.bashrc"
 fi
+export PATH="$HOME/.local/bin:$PATH"
 ```
+
+`export PATH` is always run (harmless if uv was already installed) so subsequent commands in the script can find `uv` reliably.
 
 ---
 
@@ -91,30 +101,38 @@ and exits. This gate ensures a known-good state before writing any system files.
 
 ### Phase 4 — UART Configuration
 
-Configures the Pi's hardware UART for direct ESP32 communication at 921600 baud.
+Configures the Pi's hardware UART for direct ESP32 communication at 921600 baud. Disables Bluetooth to free the full hardware UART (`/dev/ttyAMA0`).
 
 **Config file detection:**
 
 ```bash
 if [ -f /boot/firmware/config.txt ]; then
     CONFIG=/boot/firmware/config.txt      # Bookworm+
+    CMDLINE=/boot/firmware/cmdline.txt
 else
     CONFIG=/boot/config.txt               # older Raspberry Pi OS
+    CMDLINE=/boot/cmdline.txt
 fi
 ```
 
-**Changes to `$CONFIG`** (each only added if not already present):
+**Changes to `$CONFIG`** (each only appended if not already present):
 
 ```
 enable_uart=1
 dtoverlay=disable-bt
 ```
 
-`dtoverlay=disable-bt` frees the full hardware UART from Bluetooth. After this, `/dev/ttyAMA0` is the full-speed UART (capable of 921600 baud reliably).
+`dtoverlay=disable-bt` moves Bluetooth off the full UART, making `/dev/ttyAMA0` available at full speed.
 
-**Changes to `/boot/cmdline.txt`** (or `/boot/firmware/cmdline.txt` on Bookworm):
+**Changes to `$CMDLINE`:**
 
-Remove `console=serial0,115200` if present — frees the UART from the Linux serial console.
+Remove `console=serial0,115200` if present — frees the UART from the Linux serial console so the ESP32 can use it exclusively.
+
+Implementation uses `sed -i` to strip the token in place. The pattern handles both mid-line (trailing space) and end-of-line positions:
+
+```bash
+sudo sed -i 's/console=serial0,[0-9]*[ ]*//g' "$CMDLINE"
+```
 
 **Group membership:**
 
@@ -122,22 +140,56 @@ Remove `console=serial0,115200` if present — frees the UART from the Linux ser
 sudo usermod -aG dialout "$USER"
 ```
 
-Grants serial port access without sudo.
+Grants serial port access without requiring sudo at runtime. Takes effect after next login (the reboot at the end covers this).
 
-All UART changes take effect after the reboot prompted at the end of the script.
+All UART changes take effect after the reboot prompted in Phase 6.
 
 ---
 
 ### Phase 5 — Systemd Service Files
 
-Five unit files written to `/etc/systemd/system/`. All use:
-- `User=<detected $USER>`
-- `WorkingDirectory=<REPO_DIR>`
-- `ExecStart=<REPO_DIR>/.venv/bin/python ...` (the venv created by `uv sync`)
-- `Restart=on-failure`
-- `RestartSec=5`
+The installer writes six unit files to `/etc/systemd/system/`, using the existing `ships-ahoy-*` naming convention already established in the repo's `systemd/` directory:
 
-#### `shipsahoy-rtl-ais.service`
+- `ships-ahoy-rtl-ais.service` — new; runs the `rtl_ais` system binary
+- `ships-ahoy-ais.service` — updates existing with correct absolute paths
+- `ships-ahoy-enrichment.service` — updates existing with correct absolute paths
+- `ships-ahoy-web.service` — updates existing with correct absolute paths
+- `ships-ahoy-ticker.service` — updates existing with correct absolute paths + ESP32 port
+- `ships-ahoy.target` — updates existing to include `ships-ahoy-rtl-ais.service`
+
+**ExecStart pattern:** All Python services use the venv python with direct file path. This replaces the `uv run python` pattern in the existing `systemd/` files — `uv` is not guaranteed to be on `PATH` inside systemd's environment, whereas the venv path is absolute and reliable:
+
+```
+<REPO_DIR>/.venv/bin/python <REPO_DIR>/services/<name>.py --db <REPO_DIR>/ships.db
+```
+
+Variables substituted at write time from `$USER` and `$REPO_DIR`.
+
+---
+
+**rtl_ais binary path detection:**
+
+The `rtl_ais` binary may be at `/usr/bin/rtl_ais` (apt install) or `/usr/local/bin/rtl_ais` (built from source). The installer resolves the actual path after Phase 2 installs it:
+
+```bash
+RTLAIS_BIN="$(command -v rtl_ais)"
+```
+
+This value is substituted into the `ExecStart` of `ships-ahoy-rtl-ais.service`.
+
+**`static/photos` directory:**
+
+The installer creates the photos directory before starting services:
+
+```bash
+mkdir -p "$REPO_DIR/static/photos"
+```
+
+This ensures enrichment service does not fail on startup due to a missing directory.
+
+---
+
+#### `ships-ahoy-rtl-ais.service` (new)
 
 ```ini
 [Unit]
@@ -147,36 +199,41 @@ After=network.target
 [Service]
 Type=simple
 User=<USER>
-ExecStart=/usr/bin/rtl_ais -n -T -p 0 -d 0
-StandardError=null
-Restart=on-failure
+ExecStart=<RTLAIS_BIN> -n -T -p 0 -d 0
+Restart=always
 RestartSec=5
+StandardOutput=journal
+StandardError=journal
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=ships-ahoy.target
 ```
 
-#### `shipsahoy-ais.service`
+#### `ships-ahoy-ais.service`
 
 ```ini
 [Unit]
 Description=ShipsAhoy AIS ingest service
-After=shipsahoy-rtl-ais.service
-Requires=shipsahoy-rtl-ais.service
+After=network.target ships-ahoy-rtl-ais.service
+Wants=ships-ahoy-rtl-ais.service
 
 [Service]
 Type=simple
 User=<USER>
 WorkingDirectory=<REPO_DIR>
-ExecStart=<REPO_DIR>/.venv/bin/python -m services.ais_service
-Restart=on-failure
+ExecStart=<REPO_DIR>/.venv/bin/python <REPO_DIR>/services/ais_service.py --db <REPO_DIR>/ships.db
+Restart=always
 RestartSec=5
+StandardOutput=journal
+StandardError=journal
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=ships-ahoy.target
 ```
 
-#### `shipsahoy-enrichment.service`
+`Wants=` (not `Requires=`) matches the existing ticker pattern: AIS ingest degrades gracefully if rtl-ais temporarily dies rather than the whole service chain stopping.
+
+#### `ships-ahoy-enrichment.service`
 
 ```ini
 [Unit]
@@ -187,15 +244,17 @@ After=network.target
 Type=simple
 User=<USER>
 WorkingDirectory=<REPO_DIR>
-ExecStart=<REPO_DIR>/.venv/bin/python -m services.enrichment_service
-Restart=on-failure
+ExecStart=<REPO_DIR>/.venv/bin/python <REPO_DIR>/services/enrichment_service.py --db <REPO_DIR>/ships.db --photos-dir <REPO_DIR>/static/photos
+Restart=always
 RestartSec=5
+StandardOutput=journal
+StandardError=journal
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=ships-ahoy.target
 ```
 
-#### `shipsahoy-web.service`
+#### `ships-ahoy-web.service`
 
 ```ini
 [Unit]
@@ -206,83 +265,102 @@ After=network.target
 Type=simple
 User=<USER>
 WorkingDirectory=<REPO_DIR>
-ExecStart=<REPO_DIR>/.venv/bin/python -m services.web_service
-Restart=on-failure
+ExecStart=<REPO_DIR>/.venv/bin/python <REPO_DIR>/services/web_service.py --db <REPO_DIR>/ships.db --port 5000
+Restart=always
 RestartSec=5
+StandardOutput=journal
+StandardError=journal
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=ships-ahoy.target
 ```
 
-#### `shipsahoy-ticker.service`
+#### `ships-ahoy-ticker.service`
 
 ```ini
 [Unit]
 Description=ShipsAhoy LED matrix ticker
-After=shipsahoy-ais.service
+# After= is a startup ordering hint only; ticker runs independently once ships.db exists.
+After=ships-ahoy-ais.service
 
 [Service]
 Type=simple
 User=<USER>
 WorkingDirectory=<REPO_DIR>
-ExecStart=<REPO_DIR>/.venv/bin/python -m services.ticker_service --esp32-port /dev/ttyAMA0
-Restart=on-failure
+ExecStart=<REPO_DIR>/.venv/bin/python <REPO_DIR>/services/ticker_service.py --db <REPO_DIR>/ships.db --esp32-port /dev/ttyAMA0
+Restart=always
 RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=ships-ahoy.target
+```
+
+#### `ships-ahoy.target`
+
+```ini
+[Unit]
+Description=ShipsAhoy All Services
+Wants=ships-ahoy-rtl-ais.service ships-ahoy-ais.service ships-ahoy-ticker.service ships-ahoy-enrichment.service ships-ahoy-web.service
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-After writing all five files:
+---
+
+**After writing all six files:**
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable shipsahoy-rtl-ais shipsahoy-ais shipsahoy-enrichment shipsahoy-web shipsahoy-ticker
-sudo systemctl start shipsahoy-enrichment shipsahoy-web
-# ais and ticker not started yet — UART reboot required first
+sudo systemctl enable ships-ahoy.target
+sudo systemctl start ships-ahoy-rtl-ais ships-ahoy-enrichment ships-ahoy-web
+# ships-ahoy-ais and ships-ahoy-ticker not started before reboot
+# (UART not yet available until reboot activates dtoverlay=disable-bt)
 ```
 
-`shipsahoy-ais` and `shipsahoy-ticker` are enabled but not started before reboot, since they depend on the UART being available.
+`ships-ahoy-rtl-ais` uses USB (not UART) so it can start immediately. AIS ingest and ticker depend on the UART being free, so they start automatically after reboot via the target.
 
 ---
 
 ### Phase 6 — Completion Summary
-
-The script prints:
 
 ```
 ============================================================
   ShipsAhoy install complete!
 ============================================================
 
-  Services enabled:
-    shipsahoy-rtl-ais    (starts after reboot)
-    shipsahoy-ais        (starts after reboot)
-    shipsahoy-enrichment (running now)
-    shipsahoy-web        (running now)
-    shipsahoy-ticker     (starts after reboot)
+  Services started now:
+    ships-ahoy-rtl-ais    (SDR receiver, running)
+    ships-ahoy-enrichment (running)
+    ships-ahoy-web        (running)
+
+  Services start after reboot:
+    ships-ahoy-ais        (requires UART — active after reboot)
+    ships-ahoy-ticker     (requires UART — active after reboot)
 
   Web UI:  http://<hostname>.local:5000
 
-  A REBOOT IS REQUIRED to activate the UART and Bluetooth
-  changes needed for the ESP32 LED display.
+  A REBOOT IS REQUIRED to activate the UART changes needed
+  for the ESP32 LED display.
 
   Reboot now? [y/N]
 ============================================================
 ```
 
-If the user answers `y`, the script runs `sudo reboot`. Otherwise it exits and reminds them to reboot manually.
+The `<hostname>` is substituted with the output of `hostname`. If the user answers `y`, the script runs `sudo reboot`. Otherwise it exits with a reminder to reboot manually.
 
 ---
 
-## Updated `raspberry-pi-setup.md`
+## Updated `docs/raspberry-pi-setup.md` Structure
 
-The guide is restructured as:
-
-1. **Prerequisites** — flash Raspberry Pi OS, connect hardware, update packages, clone repo
-2. **Run the installer** — `./install.sh`, one section
-3. **After reboot** — open browser, verify services with `systemctl status`
-4. **Appendix: Manual install** — existing step-by-step content moved here for reference
+| Section | Content |
+|---------|---------|
+| Prerequisites | Flash Raspberry Pi OS; connect hardware; update packages; clone repo |
+| Run the installer | `./install.sh` — one command does everything |
+| After reboot | Open browser; verify services with `systemctl status ships-ahoy.target` |
+| Appendix: Manual install | Existing step-by-step content preserved for reference |
 
 ---
 
@@ -290,8 +368,14 @@ The guide is restructured as:
 
 | File | Change |
 |------|--------|
-| `install.sh` | New file — the installer script |
-| `docs/raspberry-pi-setup.md` | Restructured: prerequisites → installer → post-reboot verification → manual appendix |
+| `install.sh` | New file — the installer script (executable) |
+| `systemd/ships-ahoy-rtl-ais.service` | New file — unit file template for rtl_ais |
+| `systemd/ships-ahoy-ais.service` | Updated — absolute venv paths; ExecStart changed from `uv run python` to `.venv/bin/python`; `After` and `Wants` for `ships-ahoy-rtl-ais.service` added |
+| `systemd/ships-ahoy-enrichment.service` | Updated — absolute paths + explicit `--photos-dir` |
+| `systemd/ships-ahoy-web.service` | Updated — absolute paths |
+| `systemd/ships-ahoy-ticker.service` | Updated — absolute paths + `--esp32-port /dev/ttyAMA0` |
+| `systemd/ships-ahoy.target` | Updated — add `ships-ahoy-rtl-ais.service` to `Wants=` |
+| `docs/raspberry-pi-setup.md` | Restructured — prerequisites → installer → post-reboot → manual appendix |
 
 ---
 
@@ -299,6 +383,7 @@ The guide is restructured as:
 
 - PPM correction tuning for the RTL-SDR dongle
 - Wi-Fi configuration
-- Firewall setup
+- Firewall / UFW setup
 - HTTPS / reverse proxy for the web UI
-- Updating an existing install (the script is for fresh installs only)
+- Updating an existing install (script is for fresh installs only)
+- Running without an ESP32 (ticker is always installed)
