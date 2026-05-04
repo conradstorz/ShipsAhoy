@@ -3,13 +3,14 @@
 #include "config.h"
 #include "protocol.h"
 #include "renderer.h"
+#include "debug_log.h"
 
 static void display_task(void* pvParameters) {
     FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS);
     FastLED.setBrightness(64);  // start at ~25% — safe for initial power-on
     FastLED.clear(true);
 
-    Serial.println("[display] display_task started on Core 1");
+    dbg_info("[display] display_task started on Core 1");
 
     // Current display state — start with a standby scroll so the display
     // shows it is powered on before the Pi sends any commands.
@@ -40,7 +41,7 @@ static void display_task(void* pvParameters) {
                 // brightness=0 means "no change" (sent when field is unused)
                 if (cmd.brightness > 0) {
                     FastLED.setBrightness(cmd.brightness);
-                    Serial.printf("[display] BRIGHTNESS %u\n", cmd.brightness);
+                    dbg_info("[display] BRIGHTNESS %u", cmd.brightness);
                 }
                 break;  // does NOT fall through; display content is unchanged
             default:
@@ -54,7 +55,7 @@ static void display_task(void* pvParameters) {
                 scroll_speed  = (float)cmd.speed;
                 color_r = cmd.r; color_g = cmd.g; color_b = cmd.b;
                 current_mode  = MODE_SCROLL;
-                Serial.printf("[display] SCROLL speed=%u len=%u\n", cmd.speed, cmd.text_len);
+                dbg_info("[display] SCROLL speed=%u len=%u", cmd.speed, cmd.text_len);
                 break;
 
             case MODE_STATIC:
@@ -63,7 +64,7 @@ static void display_task(void* pvParameters) {
                 color_r = cmd.r; color_g = cmd.g; color_b = cmd.b;
                 static_until_ms = millis() + cmd.duration_ms;
                 current_mode = MODE_STATIC;
-                Serial.printf("[display] STATIC duration=%ums\n", cmd.duration_ms);
+                dbg_info("[display] STATIC duration=%ums", cmd.duration_ms);
                 break;
 
             case MODE_FRAME: {
@@ -81,7 +82,7 @@ static void display_task(void* pvParameters) {
                 }
                 FastLED.show();
                 current_mode = MODE_CLEAR;  // don't animate after raw frame
-                Serial.printf("[display] FRAME %ux%u\n", w, h);
+                dbg_info("[display] FRAME %ux%u", w, h);
                 break;
             }
 
@@ -90,7 +91,7 @@ static void display_task(void* pvParameters) {
                 col_map_width = 0;
                 scroll_offset = 0.0f;
                 current_mode  = MODE_CLEAR;
-                Serial.println("[display] CLEAR");
+                dbg_info("[display] CLEAR");
                 break;
             }
         }
@@ -130,5 +131,5 @@ static void display_task(void* pvParameters) {
 
 void display_init() {
     xTaskCreatePinnedToCore(display_task, "display_task", 8192, nullptr, 1, nullptr, 1);
-    Serial.println("[display] display_task queued on Core 1");
+    dbg_info("[display] display_task queued on Core 1");
 }
