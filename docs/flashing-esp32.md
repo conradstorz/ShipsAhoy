@@ -3,6 +3,11 @@
 This guide walks you through everything needed to load the `esp32_ticker` firmware onto an ESP32-S3-WROOM-1 development board on a Windows PC.
 No prior Arduino or ESP32 experience is assumed.
 
+> **Note:** The first flash requires a USB cable (Parts 1–9 below). After the
+> firmware is running, subsequent updates can be done over WiFi — see
+> [Part 10 — OTA firmware updates](#part-10--ota-firmware-updates-after-first-flash)
+> at the end of this guide.
+
 ---
 
 ## What You Need
@@ -292,19 +297,19 @@ Replace `COM3` with your actual COM port number every time.
 
 ---
 
-## Part 5 — OTA firmware updates (after first flash)
+## Part 10 — OTA firmware updates (after first flash)
 
 Once the firmware is running, subsequent updates can be done over WiFi — no
 USB cable required.
 
-### Step 5.1 — Connect to the debug hotspot
+### Step 10.1 — Connect to the debug hotspot
 
 On your Windows PC, open Wi-Fi settings and connect to:
 
 - **Network:** `ShipsAhoy-Debug`
 - **Password:** `ticker1234` (or whatever you set in `config.h`)
 
-### Step 5.2 — Compile and find the binary
+### Step 10.2 — Compile and find the binary
 
 ```
 arduino-cli compile --fqbn esp32:esp32:esp32s3 esp32_ticker/
@@ -317,7 +322,7 @@ arduino-cli compile --fqbn esp32:esp32:esp32s3 esp32_ticker/ --show-properties |
 
 The binary file will be named `esp32_ticker.ino.bin` inside that path.
 
-### Step 5.3 — Upload over WiFi
+### Step 10.3 — Upload over WiFi
 
 Use `espota.py` (included with the ESP32 core) to send the binary:
 
@@ -332,7 +337,7 @@ python "%LOCALAPPDATA%\Arduino15\packages\esp32\hardware\esp32\3.3.8\tools\espot
 The ESP32 will flash the new firmware and reboot. The `ShipsAhoy-Debug`
 hotspot returns within a few seconds.
 
-### Step 5.4 — Verify the update
+### Step 10.4 — Verify the update
 
 Reconnect to `ShipsAhoy-Debug` and open `http://192.168.4.1` — the Info
 column should show `[esp32_ticker] booting` and `[esp32_ticker] ready`.

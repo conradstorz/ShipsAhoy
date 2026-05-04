@@ -1,6 +1,7 @@
 #include "wifi_manager.h"
 #include "config.h"
 #include "debug_log.h"
+#include "display.h"
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <ArduinoOTA.h>
@@ -95,11 +96,21 @@ void wifi_manager_init() {
     });
 
     _server.on("/status", HTTP_GET, [](AsyncWebServerRequest* req) {
-        char json[128];
+        const char* mode_str;
+        switch (display_get_mode()) {
+            case MODE_SCROLL:      mode_str = "scroll";     break;
+            case MODE_STATIC:      mode_str = "static";     break;
+            case MODE_FRAME:       mode_str = "frame";      break;
+            case MODE_CLEAR:       mode_str = "clear";      break;
+            case MODE_BRIGHTNESS:  mode_str = "brightness"; break;
+            default:               mode_str = "unknown";    break;
+        }
+        char json[160];
         snprintf(json, sizeof(json),
-            "{\"uptime_ms\":%u,\"free_heap\":%u,\"wifi_clients\":%u}",
+            "{\"uptime_ms\":%u,\"free_heap\":%u,\"display_mode\":\"%s\",\"wifi_clients\":%u}",
             (unsigned)millis(),
             (unsigned)ESP.getFreeHeap(),
+            mode_str,
             (unsigned)WiFi.softAPgetStationNum());
         req->send(200, "application/json", json);
     });

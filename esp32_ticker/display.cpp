@@ -1,9 +1,12 @@
+#include <FastLED.h>      // must come before display.h/config.h — DATA_PIN macro collides
+                           // with FastLED template parameter names if defined first
 #include "display.h"
-#include <FastLED.h>
 #include "config.h"
 #include "protocol.h"
 #include "renderer.h"
 #include "debug_log.h"
+
+static volatile DisplayMode g_current_mode = MODE_CLEAR;
 
 static void display_task(void* pvParameters) {
     FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS);
@@ -19,6 +22,7 @@ static void display_task(void* pvParameters) {
     build_col_map(STANDBY_TEXT, sizeof(STANDBY_TEXT) - 1);
 
     DisplayMode current_mode = MODE_SCROLL;
+    g_current_mode = current_mode;
     float       scroll_offset  = -(float)DISPLAY_WIDTH;  // enter from right
     float       scroll_speed   = 30.0f;  // px/sec — gentle standby pace
     uint8_t     color_r = 0, color_g = 180, color_b = 180;  // dim cyan
@@ -55,6 +59,7 @@ static void display_task(void* pvParameters) {
                 scroll_speed  = (float)cmd.speed;
                 color_r = cmd.r; color_g = cmd.g; color_b = cmd.b;
                 current_mode  = MODE_SCROLL;
+                g_current_mode = current_mode;
                 dbg_info("[display] SCROLL speed=%u len=%u", cmd.speed, cmd.text_len);
                 break;
 
@@ -64,6 +69,7 @@ static void display_task(void* pvParameters) {
                 color_r = cmd.r; color_g = cmd.g; color_b = cmd.b;
                 static_until_ms = millis() + cmd.duration_ms;
                 current_mode = MODE_STATIC;
+                g_current_mode = current_mode;
                 dbg_info("[display] STATIC duration=%ums", cmd.duration_ms);
                 break;
 
@@ -82,6 +88,7 @@ static void display_task(void* pvParameters) {
                 }
                 FastLED.show();
                 current_mode = MODE_CLEAR;  // don't animate after raw frame
+                g_current_mode = current_mode;
                 dbg_info("[display] FRAME %ux%u", w, h);
                 break;
             }
@@ -91,6 +98,7 @@ static void display_task(void* pvParameters) {
                 col_map_width = 0;
                 scroll_offset = 0.0f;
                 current_mode  = MODE_CLEAR;
+                g_current_mode = current_mode;
                 dbg_info("[display] CLEAR");
                 break;
             }
@@ -112,6 +120,7 @@ static void display_task(void* pvParameters) {
             if (millis() >= static_until_ms) {
                 FastLED.clear(true);
                 current_mode = MODE_CLEAR;
+                g_current_mode = current_mode;
             } else {
                 render_to_leds(0, color_r, color_g, color_b);
                 FastLED.show();
@@ -127,6 +136,10 @@ static void display_task(void* pvParameters) {
 
         vTaskDelay(pdMS_TO_TICKS(FRAME_MS));
     }
+}
+
+DisplayMode display_get_mode() {
+    return g_current_mode;
 }
 
 void display_init() {
