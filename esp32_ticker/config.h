@@ -8,10 +8,24 @@
                                   // Note: GPIO 48 is the onboard RGB LED on devkits
                                   //       — use a different pin on custom PCBs.
 
-// ── UART ─────────────────────────────────────────────────────────────────────
-#define UART_BAUD        921600
-#define UART_RX_PIN      18       // Serial2 RX ← Pi TX
-#define UART_TX_PIN      17       // Serial2 TX → Pi RX
+// ── Input (USB-C to Pi) ───────────────────────────────────────────────────────
+#define PI_BAUD          921600
+
+// ── WiFi debug AP ─────────────────────────────────────────────────────────────
+#define WIFI_AP_SSID     "ShipsAhoy-Debug"
+#define WIFI_AP_PASSWORD "ticker1234"
+#define WIFI_AP_CHANNEL  6
+#define WIFI_AP_MAX_CONN 2
+
+// ── OTA ───────────────────────────────────────────────────────────────────────
+#define OTA_HOSTNAME     "shipsahoy-ticker"
+#define OTA_PASSWORD     "ota-ticker1234"
+#define OTA_PORT         3232
+
+// ── Debug log ring buffers ────────────────────────────────────────────────────
+#define DBG_BUF_INFO     80
+#define DBG_BUF_WARN     40
+#define DBG_BUF_ERROR    20
 
 // ── Protocol ─────────────────────────────────────────────────────────────────
 #define PKT_START        0xAA
