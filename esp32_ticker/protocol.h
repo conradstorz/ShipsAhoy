@@ -1,6 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include "config.h"
+#include "debug_log.h"
 
 // ── Command struct ────────────────────────────────────────────────────────────
 
@@ -24,7 +25,7 @@ struct Command {
 uint8_t crc8(const uint8_t* data, uint16_t len);
 
 // ── UART task ─────────────────────────────────────────────────────────────────
-// FreeRTOS task pinned to Core 0. Reads Serial2, parses packets,
+// FreeRTOS task pinned to Core 0. Reads Serial (USB-UART), parses packets,
 // pushes Commands onto cmd_queue, sends ACK/NACK.
 extern QueueHandle_t cmd_queue;
 void uart_task(void* pvParameters);

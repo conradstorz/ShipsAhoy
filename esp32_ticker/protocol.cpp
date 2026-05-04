@@ -33,11 +33,11 @@ enum ParseState {
 
 static bool read_byte_timeout(uint8_t* out, uint32_t timeout_ms) {
     uint32_t start = millis();
-    while (!Serial2.available()) {
+    while (!Serial.available()) {
         if (millis() - start >= timeout_ms) return false;
         vTaskDelay(1);
     }
-    *out = (uint8_t)Serial2.read();
+    *out = (uint8_t)Serial.read();
     return true;
 }
 
@@ -73,7 +73,7 @@ void uart_task(void* pvParameters) {
             if (!read_byte_timeout(&b, PKT_TIMEOUT_MS)) { state = WAIT_START; break; }
             payload_len |= b;
             if (payload_len > MAX_PAYLOAD) {
-                Serial.printf("[uart] oversized payload %u — dropping\n", payload_len);
+                dbg_warn("[uart] oversized payload %u — dropping", payload_len);
                 state = WAIT_START;
                 break;
             }
@@ -100,9 +100,9 @@ void uart_task(void* pvParameters) {
             uint8_t expected = crc8(crc_buf, 3 + payload_len);
 
             if (rx_crc != expected) {
-                Serial.printf("[uart] CRC fail cmd=0x%02X got=0x%02X exp=0x%02X\n",
-                              cmd, rx_crc, expected);
-                Serial2.write(NACK_BYTE);
+                dbg_warn("[uart] CRC fail cmd=0x%02X got=0x%02X exp=0x%02X",
+                         cmd, rx_crc, expected);
+                Serial.write(NACK_BYTE);
                 state = WAIT_START;
                 break;
             }
@@ -141,7 +141,7 @@ void uart_task(void* pvParameters) {
                 c.frame_h = ((uint16_t)payload_buf[2] << 8) | payload_buf[3];
                 // Reject frames that exceed display dimensions (cropping would corrupt stride)
                 if (c.frame_w > DISPLAY_WIDTH || c.frame_h > DISPLAY_HEIGHT) {
-                    Serial.printf("[uart] FRAME too large %ux%u — NACK\n", c.frame_w, c.frame_h);
+                    dbg_warn("[uart] FRAME too large %ux%u — NACK", c.frame_w, c.frame_h);
                     valid = false; break;
                 }
                 uint32_t expected_px = (uint32_t)c.frame_w * c.frame_h * 3;
@@ -158,7 +158,7 @@ void uart_task(void* pvParameters) {
 
             case CMD_PING:
                 // ACK-only. No queue push needed.
-                Serial2.write(ACK_BYTE);
+                Serial.write(ACK_BYTE);
                 state = WAIT_START;
                 valid = false;  // skip the queue-send path below
                 break;
@@ -171,7 +171,7 @@ void uart_task(void* pvParameters) {
                 break;
 
             default:
-                Serial.printf("[uart] unknown cmd=0x%02X — ignoring\n", cmd);
+                dbg_warn("[uart] unknown cmd=0x%02X — ignoring", cmd);
                 valid = false;
                 break;
             }
@@ -179,13 +179,13 @@ void uart_task(void* pvParameters) {
             if (!valid) {
                 // CMD_PING already sent ACK; everything else gets NACK
                 if (cmd != CMD_PING) {
-                    Serial2.write(NACK_BYTE);
+                    Serial.write(NACK_BYTE);
                 }
                 state = WAIT_START;
                 break;
             }
 
-            Serial2.write(ACK_BYTE);
+            Serial.write(ACK_BYTE);
             xQueueSend(cmd_queue, &c, 0);  // non-blocking; drop if queue full
             state = WAIT_START;
             break;
@@ -197,7 +197,7 @@ void uart_task(void* pvParameters) {
 
 void protocol_init() {
     cmd_queue = xQueueCreate(CMD_QUEUE_DEPTH, sizeof(Command));
-    Serial2.begin(UART_BAUD, SERIAL_8N1, UART_RX_PIN, UART_TX_PIN);
+    Serial.begin(PI_BAUD);
     xTaskCreatePinnedToCore(uart_task, "uart_task", 8192, nullptr, 1, nullptr, 0);
-    Serial.println("[protocol] uart_task started on Core 0");
+    dbg_info("[protocol] uart_task started on Core 0");
 }
