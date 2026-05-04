@@ -69,17 +69,14 @@ retry() {
 state_set() {
     local key="$1" val="$2"
     local tmp="${STATE_FILE}.tmp"
-    if [[ -f "${STATE_FILE}" ]]; then
-        grep -vF "${key}=" "${STATE_FILE}" > "${tmp}" 2>/dev/null || true
-        mv "${tmp}" "${STATE_FILE}" || die "state_set: failed to update ${STATE_FILE}"
-    fi
-    echo "${key}=${val}" >> "${STATE_FILE}"
+    { grep -v "^${key}=" "${STATE_FILE}" 2>/dev/null || true; echo "${key}=${val}"; } > "${tmp}"
+    mv "${tmp}" "${STATE_FILE}" || die "state_set: failed to update ${STATE_FILE}"
 }
 
 state_get() {
     local key="$1"
     [[ -f "${STATE_FILE}" ]] || { echo ""; return 0; }
-    grep -F "${key}=" "${STATE_FILE}" 2>/dev/null | tail -1 | cut -d= -f2- || true
+    grep "^${key}=" "${STATE_FILE}" 2>/dev/null | tail -1 | cut -d= -f2- || true
 }
 
 require_state() {
