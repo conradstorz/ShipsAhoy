@@ -16,6 +16,7 @@ No prior Arduino or ESP32 experience is assumed.
 - **arduino-cli** — the command-line tool that compiles and uploads Arduino sketches
 - **ESP32 board support package** — tells arduino-cli how to build for ESP32-S3
 - **FastLED library** — drives the WS2812B LED panels
+- **AsyncTCP and ESP Async WebServer libraries** — WiFi debug web server
 
 ---
 
@@ -98,6 +99,17 @@ arduino-cli lib install "FastLED"
 ```
 
 Wait for it to finish. You should see output ending in `FastLED@x.x.x installed`.
+
+### Install additional libraries
+
+The firmware also requires two libraries for the WiFi debug web server:
+
+```
+arduino-cli lib install "AsyncTCP"
+arduino-cli lib install "ESP Async WebServer"
+```
+
+Wait for each to finish.
 
 ---
 
@@ -188,27 +200,24 @@ That last line means the board has been reset and the new firmware is now runnin
 
 ## Part 8 — Verify the Board is Running
 
-Open the serial monitor to see boot messages from the board:
+After flashing, the ESP32 starts a WiFi hotspot for debug output. To see boot messages:
 
-```
-arduino-cli monitor -p COM3 -c baudrate=115200
-```
+1. On your Windows PC, open **Wi-Fi settings** and connect to:
+   - **Network:** `ShipsAhoy-Debug`
+   - **Password:** `ticker1234`
 
-Again, replace `COM3` with your COM port number.
+2. Open a browser and go to: `http://192.168.4.1`
 
-**Expected output within a few seconds:**
-```
-[esp32_ticker] booting
-  Display: 320 x 8 (2560 LEDs) on GPIO 38
-  UART: 921600 baud on RX=18 TX=17
-[display] display_task started on Core 1
-[protocol] uart_task started on Core 0
-[esp32_ticker] ready
-```
+3. The **Info** column should show messages similar to:
+   ```
+   [wifi] AP "ShipsAhoy-Debug" up at 192.168.4.1
+   [esp32_ticker] booting
+   [display] display_task started on Core 1
+   [protocol] uart_task started on Core 0
+   [esp32_ticker] ready
+   ```
 
-If you see this output, the firmware is running correctly.
-
-To exit the serial monitor, press **Ctrl + C**.
+If these messages appear, the firmware is running correctly. The USB serial monitor (`arduino-cli monitor`) will show no output from the firmware — all debug output goes through the WiFi web page.
 
 ---
 
@@ -261,11 +270,11 @@ The board may need to be put into bootloader mode manually:
 ### No COM port appears in Device Manager
 Your board requires a driver that Windows did not install automatically. Check the board's documentation for the USB-to-serial chip it uses (common ones are CP2102, CH340, or FTDI) and download the driver from the manufacturer's website.
 
-### Serial monitor shows garbage characters
-The baud rate is wrong. Make sure you used `-c baudrate=115200` in the monitor command. The firmware sends at 115200 baud (the monitor port), not 921600 (that speed is only used for communication with the Raspberry Pi).
+### Serial monitor shows no output
+The firmware does not use the USB serial monitor for debug output. All debug messages go to the WiFi debug web page. Connect to the `ShipsAhoy-Debug` WiFi hotspot and open `http://192.168.4.1` in a browser to see debug output.
 
 ### Board boots but LEDs do not light up when connected to the Pi
-This is expected — the firmware waits for commands from the Pi over UART. The LEDs will only light up once the Raspberry Pi sends a `CMD_SCROLL`, `CMD_STATIC`, or `CMD_FRAME` command. See the main ShipsAhoy documentation for running the Pi-side software.
+Connect to the `ShipsAhoy-Debug` WiFi hotspot and open `http://192.168.4.1` to see the debug log. If you see `[esp32_ticker] ready` but no display activity, the Pi has not yet sent a command — confirm the ticker service is running and the USB-C cable is connected between the Pi and ESP32.
 
 ---
 
@@ -275,7 +284,55 @@ This is expected — the firmware waits for commands from the Pi over UART. The 
 |------|---------|
 | Compile only | `arduino-cli compile --fqbn esp32:esp32:esp32s3 esp32_ticker` |
 | Upload to board | `arduino-cli upload -p COM3 --fqbn esp32:esp32:esp32s3 esp32_ticker` |
-| Open serial monitor | `arduino-cli monitor -p COM3 -c baudrate=115200` |
+| Open debug web page | Connect to `ShipsAhoy-Debug` WiFi, open `http://192.168.4.1` |
 | Compile + upload in one step | `arduino-cli compile --fqbn esp32:esp32:esp32s3 esp32_ticker && arduino-cli upload -p COM3 --fqbn esp32:esp32:esp32s3 esp32_ticker` |
+| OTA update | `python espota.py -i 192.168.4.1 -p 3232 --auth=ota-ticker1234 -f <bin>` |
 
 Replace `COM3` with your actual COM port number every time.
+
+---
+
+## Part 5 — OTA firmware updates (after first flash)
+
+Once the firmware is running, subsequent updates can be done over WiFi — no
+USB cable required.
+
+### Step 5.1 — Connect to the debug hotspot
+
+On your Windows PC, open Wi-Fi settings and connect to:
+
+- **Network:** `ShipsAhoy-Debug`
+- **Password:** `ticker1234` (or whatever you set in `config.h`)
+
+### Step 5.2 — Compile and find the binary
+
+```
+arduino-cli compile --fqbn esp32:esp32:esp32s3 esp32_ticker/
+```
+
+After compiling, arduino-cli places the binary in a temporary build folder. Find it with:
+```
+arduino-cli compile --fqbn esp32:esp32:esp32s3 esp32_ticker/ --show-properties | findstr BUILD_PATH
+```
+
+The binary file will be named `esp32_ticker.ino.bin` inside that path.
+
+### Step 5.3 — Upload over WiFi
+
+Use `espota.py` (included with the ESP32 core) to send the binary:
+
+```
+python "%LOCALAPPDATA%\Arduino15\packages\esp32\hardware\esp32\3.3.8\tools\espota.py" -i 192.168.4.1 -p 3232 --auth=ota-ticker1234 -f <path-to-esp32_ticker.ino.bin>
+```
+
+> **Note:** The version number in the path (`3.3.8`) may differ. Check
+> `%LOCALAPPDATA%\Arduino15\packages\esp32\hardware\esp32\` for the installed
+> version directory.
+
+The ESP32 will flash the new firmware and reboot. The `ShipsAhoy-Debug`
+hotspot returns within a few seconds.
+
+### Step 5.4 — Verify the update
+
+Reconnect to `ShipsAhoy-Debug` and open `http://192.168.4.1` — the Info
+column should show `[esp32_ticker] booting` and `[esp32_ticker] ready`.

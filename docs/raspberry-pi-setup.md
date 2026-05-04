@@ -225,14 +225,14 @@ Options:
 
 ### Terminal 5 (optional) — LED matrix ticker
 
-If you have an ESP32 with LED matrix connected via USB serial:
+If you have an ESP32 with LED matrix connected, plug a USB-C cable from any USB port on the Pi to the USB port on the ESP32. No GPIO wiring is required.
 
 ```bash
 cd ~/ShipsAhoy
 uv run python -m services.ticker_service --esp32-port /dev/ttyUSB0
 ```
 
-Replace `/dev/ttyUSB0` with the actual serial device. To find it, run `ls /dev/ttyUSB*` or `ls /dev/ttyACM*` before and after plugging in the ESP32.
+Run `ls /dev/ttyUSB*` before and after plugging in the ESP32 to confirm the device path.
 
 Options:
 
