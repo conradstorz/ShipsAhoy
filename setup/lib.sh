@@ -11,7 +11,7 @@ _ts() { date '+%Y-%m-%d %H:%M:%S'; }
 
 _log() {
     local level="$1"; shift
-    echo "[$(_ts)] [${level}] $*"
+    printf '[%s] [%s] %s\n' "$(_ts)" "${level}" "$*"
 }
 
 log_info()    { _log "INFO " "$@"; }
@@ -45,6 +45,8 @@ retry() {
     local attempt=1
     local delay=5
 
+    (( max >= 1 )) || die "retry: MAX_ATTEMPTS must be >= 1 (got ${max})"
+
     while true; do
         if "$@"; then
             return 0
@@ -68,8 +70,8 @@ state_set() {
     local key="$1" val="$2"
     local tmp="${STATE_FILE}.tmp"
     if [[ -f "${STATE_FILE}" ]]; then
-        grep -v "^${key}=" "${STATE_FILE}" > "${tmp}" 2>/dev/null || true
-        mv "${tmp}" "${STATE_FILE}"
+        grep -vF "${key}=" "${STATE_FILE}" > "${tmp}" 2>/dev/null || true
+        mv "${tmp}" "${STATE_FILE}" || die "state_set: failed to update ${STATE_FILE}"
     fi
     echo "${key}=${val}" >> "${STATE_FILE}"
 }
@@ -77,7 +79,7 @@ state_set() {
 state_get() {
     local key="$1"
     [[ -f "${STATE_FILE}" ]] || { echo ""; return 0; }
-    grep "^${key}=" "${STATE_FILE}" 2>/dev/null | tail -1 | cut -d= -f2- || true
+    grep -F "${key}=" "${STATE_FILE}" 2>/dev/null | tail -1 | cut -d= -f2- || true
 }
 
 require_state() {
@@ -96,6 +98,7 @@ require_state() {
 # True if NAME is on PATH
 cmd_exists() { command -v "$1" &>/dev/null; }
 
+# Usage: in_group USER GROUP — true if USER belongs to GROUP
 # True if USER is already a member of GROUP
 in_group() { id -nG "$1" 2>/dev/null | tr ' ' '\n' | grep -qx "$2"; }
 
