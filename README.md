@@ -39,7 +39,21 @@ Full step-by-step instructions are in the setup guides:
 
 ---
 
-## Quick start (power user guide)
+## Quick start
+
+### Raspberry Pi (automated installer)
+
+```bash
+git clone https://github.com/conradstorz/ShipsAhoy.git
+cd ShipsAhoy
+bash setup.sh
+```
+
+The installer handles everything: system packages, `rtl_ais`, Python environment,
+and systemd services that start automatically on boot. Open
+`http://<pi-ip>:5000` when it completes.
+
+### Development / manual setup
 
 ```bash
 # Install rtl_ais (receives AIS radio signals)
@@ -66,12 +80,13 @@ Then open `http://localhost:5000` in your browser.
 ## How it works
 
 ```
-SDR dongle → rtl_ais → AIS service   → database
-                      Enrichment service ↗        ↘ Web UI (browser)
-                      Ticker service    ↗        ↘ LED matrix (optional)
+SDR dongle → rtl_ais → AIS service ─────────────────┐
+                                                     ↓
+                        Enrichment service ──→ database ──→ Web UI (browser)
+                        Ticker service    ──→          ──→ LED matrix (optional)
 ```
 
-Four small background services share a local database. You interact via the web browser.
+Four background services share a local SQLite database. The AIS service writes ship positions; enrichment adds names and photos; the web UI and ticker read from it.
 
 ---
 
