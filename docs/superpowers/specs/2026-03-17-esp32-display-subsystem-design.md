@@ -47,7 +47,7 @@ All packets share a common binary frame:
 - `CMD` — 1-byte command identifier
 - `LEN` — 2-byte big-endian payload length
 - `PAYLOAD` — variable-length command data (maximum 512 bytes total per packet)
-- `CRC8` — computed over bytes CMD through end of PAYLOAD using the **CRC8/MAXIM (Dallas 1-Wire) polynomial 0x31**, initial value 0x00, no reflection
+- `CRC8` — computed over bytes CMD through end of PAYLOAD using a **non-reflected CRC8, polynomial 0x31**, initial value 0x00. This is NOT CRC8/MAXIM-DOW — that variant uses bit reflection (refin=True, refout=True); this one does not.
 
 `MAX_PAYLOAD_BYTES = 512` is the limit on total payload length (all fields combined). Maximum UTF-8 text bytes per command: `SCROLL` = 512 − 2 (speed) − 3 (color) = **507 bytes**; `STATIC` = 512 − 4 (duration) − 3 (color) = **505 bytes**. `encode_packet` enforces these per-command limits and truncates with a `WARNING` log.
 
@@ -91,7 +91,7 @@ Pure protocol encoding — no I/O, fully unit-testable without hardware.
 - `MAX_PAYLOAD_BYTES = 512` — maximum total payload length; per-command text limits derived as above
 - `GLYPH_WIDTH_PX = 6` — pixels per character (5 px glyph + 1 px spacing); used by `ESP32Driver` to estimate scroll duration without a full render
 - `SPRITES: dict[str, int]` — emoji/name → sprite ID mapping
-- `crc8(data: bytes) -> int` — CRC8/MAXIM (polynomial 0x31, init 0x00)
+- `crc8(data: bytes) -> int` — non-reflected CRC8 (polynomial 0x31, init 0x00)
 - `encode_text(text: str) -> bytes` — substitutes known emoji with `\x1E` + sprite ID; logs unknown emoji at DEBUG; strips all non-ASCII characters not in SPRITES, guaranteeing single-byte-per-glyph output so that `len(encode_text(text))` gives a correct glyph count for scroll-duration estimation
 - `encode_packet(cmd: int, payload: bytes) -> bytes` — builds the full framed packet
 
@@ -232,7 +232,7 @@ The Pi never stalls on display errors. Events are marked as displayed after the 
 
 | Unit | Test approach |
 |------|--------------|
-| `esp32_protocol.py` | Pure unit tests: packet encoding, CRC8/MAXIM correctness against known vectors, emoji substitution, unknown emoji logging, oversized text truncation |
+| `esp32_protocol.py` | Pure unit tests: packet encoding, non-reflected CRC8 correctness against known vectors, emoji substitution, unknown emoji logging, oversized text truncation |
 | `renderer.py` | Unit tests: known string → expected pixel array, scroll offset arithmetic, frame bounds |
 | `ESP32Driver` | Tests with a mock `serial.Serial`: correct bytes sent, ACK/NACK/timeout handling, duration sleep verified, reconnect logic, best-effort return on all error paths |
 | `PreviewDriver` | Unit tests: frame advance, scroll position, pixel grid dimensions |

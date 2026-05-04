@@ -61,9 +61,15 @@ def encode_text(text: str) -> bytes:
     """Substitute known SPRITES with \\x1E + ID escapes; strip all other non-ASCII.
 
     Each ASCII character encodes as one byte; each known sprite encodes as
-    two bytes (escape byte 0x1E followed by sprite ID). Callers computing
-    scroll duration should use the plan-specified formula; they must not
-    assume len() gives a direct glyph count when sprites are present.
+    two bytes (0x1E + sprite ID) but renders as one glyph (GLYPH_WIDTH_PX
+    wide). To estimate scroll duration use:
+
+        len(encode_text(s)) * GLYPH_WIDTH_PX / speed_px_per_sec
+
+    This slightly oversleeps for sprite-containing text (each sprite adds
+    one extra byte to the count), but the error is small and acceptable for
+    throttling purposes.
+
     Unknown non-ASCII characters are stripped and logged at DEBUG level.
     """
     result = bytearray()
