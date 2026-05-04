@@ -299,7 +299,7 @@ To pull the latest code and restart:
 cd ~/ShipsAhoy
 git pull
 uv sync
-sudo systemctl restart shipsahoy-ais shipsahoy-enrichment shipsahoy-web
+sudo systemctl restart ships-ahoy-ais ships-ahoy-enrichment ships-ahoy-web
 ```
 
 ---
@@ -313,12 +313,12 @@ sudo systemctl restart shipsahoy-ais shipsahoy-enrichment shipsahoy-web
 
 ### No ships appearing after several minutes
 - Confirm `rtl_ais` is running: `pgrep -a rtl_ais`
-- Check that the AIS service is connected: `sudo journalctl -u shipsahoy-ais -n 50`
+- Check that the AIS service is connected: `sudo journalctl -u ships-ahoy-ais -n 50`
 - Try moving the antenna outdoors or to a higher location. AIS is line-of-sight; a few metres of height makes a large difference.
 - Check your PPM correction. Run `rtl_test -p` for a few minutes to estimate your dongle's PPM offset, then pass it with `-p <value>` to `rtl_ais`.
 
 ### Web UI not reachable from another device
-- Confirm the service is running: `sudo systemctl status shipsahoy-web`
+- Confirm the service is running: `sudo systemctl status ships-ahoy-web`
 - Check the Pi's firewall: `sudo ufw status`. If active, allow port 5000: `sudo ufw allow 5000/tcp`
 - Make sure you are using the Pi's IP address, not `localhost`.
 
