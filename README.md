@@ -1,159 +1,77 @@
 # ShipsAhoy
 
-Monitor shipping traffic nearby using their automated radio tagging broadcasts.
+See ships near you using their radio broadcasts — no internet required.
 
-ShipsAhoy uses a small computer (such as a Raspberry Pi) paired with an
-inexpensive **Software Defined Radio (SDR)** dongle and a marine VHF antenna to
-receive **AIS (Automatic Identification System)** broadcasts from ships in your
-area.  Every vessel over 300 GT and all passenger ships is required by
-international law to transmit AIS data, including identity, position, speed,
-heading, and more.  Range depends on the broadcast power of nearby ships and
-your antenna height; inland and coastal ships within ~20–40 nautical miles are
-typically receivable.
+Ships are required by law to continuously broadcast their identity, position,
+speed, and heading over radio. ShipsAhoy picks up those signals using an
+inexpensive USB dongle and displays live maritime traffic in your browser.
 
 ---
 
-## Hardware requirements
+## What it does
 
-| Component | Example / notes |
-|-----------|-----------------|
-| Computer | Raspberry Pi 4, any Linux/macOS/Windows PC |
-| SDR dongle | RTL-SDR v3 (RTL2832U chipset, ~$25 USD) |
-| Antenna | Marine VHF whip tuned for 162 MHz (AIS channels 87B / 88B) |
+- Receives live AIS ship broadcasts via an RTL-SDR USB dongle
+- Shows a live ship list in your web browser — name, position, speed, status
+- Automatically looks up each ship's details (flag, type, photo) from public registries
+- *(optional)* Scrolls ship arrivals and departures on an RGB LED matrix display
 
 ---
 
-## Software dependencies
+## What you need
 
-### System tool — `rtl_ais`
+| Item | Details |
+|------|---------|
+| Computer | Raspberry Pi 4, or any Linux/macOS/Windows PC |
+| USB dongle | RTL-SDR v3 (~$25) — search "RTL-SDR Blog v3" |
+| Antenna | Marine VHF antenna for 162 MHz — often included with the dongle |
+| *(optional)* ESP32 + LED panel | For the scrolling ticker display |
 
-`rtl_ais` drives the SDR hardware and outputs decoded AIS NMEA sentences over
-a network socket.  Install it on the same machine as the dongle:
+---
+
+## Getting started
+
+Full step-by-step instructions are in the setup guides:
+
+| Guide | What it covers |
+|-------|---------------|
+| [Raspberry Pi Setup](docs/raspberry-pi-setup.md) | Install everything on a Pi, run as background services |
+| [ESP32 Flashing](docs/flashing-esp32.md) | Load the LED matrix firmware onto an ESP32 (Windows) |
+
+---
+
+## Quick start (power user guide)
 
 ```bash
-# Debian / Ubuntu / Raspberry Pi OS
+# Install rtl_ais (receives AIS radio signals)
 sudo apt-get install rtl-ais
 
-# or build from source
-git clone https://github.com/dgiardini/rtl-ais
-cd rtl-ais && make && sudo make install
-```
-
-### Python packages
-
-```bash
-pip install -r requirements.txt
-```
-
----
-
-## Installation
-
-```bash
+# Clone and install
 git clone https://github.com/conradstorz/ShipsAhoy.git
 cd ShipsAhoy
-pip install -r requirements.txt
+uv sync
+
+# Start the SDR receiver
+rtl_ais -n -T -p 0 -d 0 2>/dev/null &
+
+# Start the services
+uv run python -m services.ais_service &
+uv run python -m services.enrichment_service &
+uv run python -m services.web_service
 ```
+
+Then open `http://localhost:5000` in your browser.
 
 ---
 
-## Usage
-
-### 1. Start the SDR receiver
-
-In one terminal, start `rtl_ais` so that it listens on the default TCP port
-(10110):
-
-```bash
-rtl_ais -n -T -p 0 -d 0 2>/dev/null
-```
-
-Flag reference:
-
-| Flag | Meaning |
-|------|---------|
-| `-n` | Do not correct frequency automatically |
-| `-T` | Output to TCP (default port 10110) |
-| `-p 0` | PPM correction (0 = none; tune as needed for your dongle) |
-| `-d 0` | Use the first SDR device |
-
-### 2. Start ShipsAhoy
-
-In a second terminal:
-
-```bash
-python main.py
-```
-
-The display refreshes every 2 seconds and shows all ships heard so far.
-
-### Command-line options
+## How it works
 
 ```
-usage: ships_ahoy [-h] [--host HOST] [--port PORT] [--udp] [--refresh SECONDS] [--verbose]
-
-options:
-  --host HOST        Hostname or IP of the AIS data source (default: localhost)
-  --port PORT        Port of the AIS data source (default: 10110)
-  --udp              Use UDP instead of TCP to receive AIS data
-  --refresh SECONDS  Display refresh interval in seconds (default: 2.0)
-  --verbose          Enable verbose/debug logging
+SDR dongle → rtl_ais → AIS service   → database
+                      Enrichment service ↗        ↘ Web UI (browser)
+                      Ticker service    ↗        ↘ LED matrix (optional)
 ```
 
-### Example output
-
-```
-=======================================================
-  ⚓  ShipsAhoy — AIS Ship Tracker
-  2024-07-04 14:32:01   Ships tracked: 3
-=======================================================
-
-MMSI : 366053242
-  Name    : GOLDEN GATE FERRY
-  Position: 37.80212° N  -122.42357° E
-  Speed   : 12.4 knots
-  Heading : 220°
-  Course  : 219.3°
-  Status  : Under way (engine)
-  Type    : Passenger
-  Last seen: 14:32:00
-
-MMSI : 338234567
-  Name    : TUG PACIFIC
-  Position: 37.79100° N  -122.41000° E
-  Speed   : 3.1 knots
-  Status  : Engaged in fishing
-  Type    : Towing
-  Last seen: 14:31:58
-```
-
----
-
-## Project structure
-
-```
-ShipsAhoy/
-├── main.py                  # CLI entry point
-├── requirements.txt         # Python dependencies
-├── ships_ahoy/
-│   ├── __init__.py
-│   ├── ais_receiver.py      # Connects to rtl_ais via TCP/UDP; yields decoded AIS messages
-│   ├── ship_tracker.py      # Maintains a live registry of tracked ships
-│   └── display.py           # Terminal display / formatting
-└── tests/
-    ├── test_ais_receiver.py
-    ├── test_display.py
-    └── test_ship_tracker.py
-```
-
----
-
-## Running tests
-
-```bash
-pip install pytest
-python -m pytest tests/ -v
-```
+Four small background services share a local database. You interact via the web browser.
 
 ---
 
@@ -161,8 +79,5 @@ python -m pytest tests/ -v
 
 ShipsAhoy is dual-licensed:
 
-- Open-source license: GNU Affero General Public License v3.0 (`AGPL-3.0`) for community/open-source use. See [LICENSE](LICENSE).
-- Commercial license: If you want to use ShipsAhoy in a commercial/proprietary product without AGPL obligations, contact the author for a paid commercial license. See [LICENSE-COMMERCIAL.md](LICENSE-COMMERCIAL.md).
-
-Commercial use is not permitted under separate proprietary terms unless you obtain a commercial license from the copyright holder.
-
+- **Open-source:** [AGPL-3.0](LICENSE) for community use
+- **Commercial:** contact the author for a paid license — see [LICENSE-COMMERCIAL.md](LICENSE-COMMERCIAL.md)

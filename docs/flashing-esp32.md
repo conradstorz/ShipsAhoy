@@ -128,10 +128,10 @@ The board shows up as a COM port on Windows. You need to know which number it go
 
 ## Part 5 — Navigate to the Project Folder
 
-The firmware sketch is inside the ShipsAhoy repository. In the command window, navigate there:
+The firmware sketch is inside the ShipsAhoy repository. In the command window, navigate to wherever you cloned it. For example:
 
 ```
-cd D:\Users\Conrad\Documents\programming\ShipsAhoy\ShipsAhoy
+cd C:\path\to\ShipsAhoy
 ```
 
 Confirm you are in the right place:
