@@ -24,7 +24,7 @@ inexpensive USB dongle and displays live maritime traffic in your browser.
 | Computer | Raspberry Pi 4, or any Linux/macOS/Windows PC |
 | USB dongle | RTL-SDR v3 (~$25) — search "RTL-SDR Blog v3" |
 | Antenna | Marine VHF antenna for 162 MHz — often included with the dongle |
-| *(optional)* ESP32 + LED panel | For the scrolling ticker display |
+| *(optional)* ESP32 + LED panel | For the scrolling ticker display; connects to the Pi via USB-C cable |
 
 ---
 
@@ -83,10 +83,10 @@ Then open `http://localhost:5000` in your browser.
 SDR dongle → rtl_ais → AIS service ─────────────────┐
                                                      ↓
                         Enrichment service ──→ database ──→ Web UI (browser)
-                        Ticker service    ──→          ──→ LED matrix (optional)
+                        Ticker service ←────────────┘    ──→ ESP32 → LED matrix (optional)
 ```
 
-Four background services share a local SQLite database. The AIS service writes ship positions; enrichment adds names and photos; the web UI and ticker read from it.
+Four background services share a local SQLite database. The AIS service writes ship positions; enrichment adds names and photos; the web UI and ticker read from it. The ticker sends display commands to the ESP32 over USB-C; a built-in WiFi debug page is available at `http://192.168.4.1` when connected to the `ShipsAhoy-Debug` hotspot.
 
 ---
 
