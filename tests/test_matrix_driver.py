@@ -51,6 +51,27 @@ def test_stub_show_static_accepts_zero_duration():
     driver.show_static("X", duration_sec=0.0)
 
 
+# --- ESP32 display constant pinning ---
+
+def test_esp32_display_constants_match_firmware():
+    """Pin the ESP32 display dimensions to match config.h (10 panels × 32 = 320 wide, 8 tall)."""
+    assert ESP32_DISPLAY_WIDTH == 320
+    assert ESP32_DISPLAY_HEIGHT == 8
+
+def test_preview_driver_default_dimensions_match_firmware():
+    """PreviewDriver() with no args should use the firmware-matching dimensions."""
+    d = PreviewDriver()
+    assert d._display_width == 320
+    assert d._display_height == 8
+
+def test_preview_driver_default_frame_dimensions():
+    """Default PreviewDriver frame is 320 wide × 8 tall."""
+    d = PreviewDriver()
+    d.scroll_text("HI", speed_px_per_sec=40.0)
+    frame = d.get_current_frame(elapsed_sec=0.0)
+    assert len(frame) == 8
+    assert all(len(row) == 320 for row in frame)
+
 # --- send_frame concrete default ---
 
 def test_stub_driver_send_frame_does_not_raise():

@@ -8,10 +8,10 @@ def client(tmp_path):
     db_path = str(tmp_path / "test.db")
     # Configure the matrix_driver mock with concrete values so json.dumps works.
     matrix_mock = mock.MagicMock()
-    matrix_mock.ESP32_DISPLAY_WIDTH = 600
-    matrix_mock.ESP32_DISPLAY_HEIGHT = 32
+    matrix_mock.ESP32_DISPLAY_WIDTH = 320
+    matrix_mock.ESP32_DISPLAY_HEIGHT = 8
     # get_current_frame must return a 2-D list of [R,G,B] pixels.
-    dummy_frame = [[[0, 0, 0]] * 600] * 32
+    dummy_frame = [[[0, 0, 0]] * 320] * 8
     matrix_mock.PreviewDriver.return_value.get_current_frame.return_value = dummy_frame
 
     with mock.patch.dict(sys.modules, {

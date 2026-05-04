@@ -33,9 +33,9 @@ PANEL_COUNT = 5
 DISPLAY_WIDTH = PANEL_WIDTH * PANEL_COUNT  # 320
 DISPLAY_HEIGHT = PANEL_HEIGHT              # 32
 
-# WS2812 ESP32 display dimensions
-ESP32_DISPLAY_WIDTH  = 600
-ESP32_DISPLAY_HEIGHT = 32
+# WS2812 ESP32 display dimensions: 10 panels × 32 LEDs wide, 8 rows tall
+ESP32_DISPLAY_WIDTH  = 320
+ESP32_DISPLAY_HEIGHT = 8
 
 
 class MatrixDriver(abc.ABC):

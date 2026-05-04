@@ -8,8 +8,8 @@ Usage::
 
     from ships_ahoy.renderer import render_text, scroll_frame
 
-    pixels = render_text("ARRIVED", color=(255, 255, 0), width=600, height=32)
-    frame  = scroll_frame(pixels, offset=12, display_width=600)
+    pixels = render_text("ARRIVED", color=(255, 255, 0), width=320, height=8)
+    frame  = scroll_frame(pixels, offset=12, display_width=320)
 """
 
 from typing import NamedTuple

@@ -17,7 +17,7 @@ import argparse
 import sys
 import time
 
-from ships_ahoy.matrix_driver import PreviewDriver, ESP32_DISPLAY_WIDTH, ESP32_DISPLAY_HEIGHT
+from ships_ahoy.matrix_driver import PreviewDriver
 
 
 def _ansi_fg(r: int, g: int, b: int) -> str:
