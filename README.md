@@ -48,6 +48,8 @@ git clone https://github.com/conradstorz/ShipsAhoy.git
 cd ShipsAhoy
 bash setup.sh
 ```
+or as an all-in-one command;
+git clone https://github.com/conradstorz/ShipsAhoy.git && cd ShipsAhoy && bash setup.sh
 
 The installer handles everything: system packages, `rtl_ais`, Python environment,
 and systemd services that start automatically on boot. Open
