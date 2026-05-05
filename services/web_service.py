@@ -182,7 +182,7 @@ def _install_log_by_level(n: int = 25) -> dict:
             for raw_line in f:
                 line = raw_line.rstrip()
                 for level in buckets:
-                    if f"[{level}]" in line:
+                    if f"[{level}" in line:
                         buckets[level].append(line)
                         break
     except FileNotFoundError:
