@@ -48,3 +48,8 @@ CLAUDE.md
 # Setup — instance-specific generated files
 setup/.state
 setup/install.log
+
+# SQLite database — instance-specific runtime data
+*.db
+*.db-shm
+*.db-wal
