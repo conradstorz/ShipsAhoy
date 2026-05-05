@@ -95,6 +95,80 @@ def _system_status() -> dict:
         "esp32_attached": os.path.exists(ESP32_UART_DEVICE),
     }
 
+
+def _rtl_ais_journal(lines: int = 40) -> str:
+    """Return the last *lines* lines from the ships-ahoy-rtl-ais journal."""
+    try:
+        result = subprocess.run(
+            ["journalctl", "-u", "ships-ahoy-rtl-ais", f"-n{lines}", "--no-pager",
+             "--output=short-monotonic"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return result.stdout.strip() or "(no journal entries found)"
+    except Exception as exc:
+        return f"(error reading journal: {exc})"
+
+
+def _fm_scan() -> dict:
+    """Stop rtl_ais, sweep the FM broadcast band, restart rtl_ais.
+
+    Returns {'stations': [{freq_mhz, db}, ...], 'raw': str, 'error': str|None}.
+    Stations are sorted by frequency; only bins above –60 dBFS are included.
+    """
+    rtl_power = subprocess.run(["which", "rtl_power"], capture_output=True, text=True).stdout.strip()
+    if not rtl_power:
+        return {"stations": [], "raw": "", "error": "rtl_power not found — install the rtl-sdr package."}
+
+    try:
+        subprocess.run(["sudo", "systemctl", "stop", "ships-ahoy-rtl-ais"],
+                       timeout=6, check=True)
+        time.sleep(0.5)
+    except Exception as exc:
+        return {"stations": [], "raw": "", "error": f"Could not stop rtl_ais service: {exc}"}
+
+    raw = ""
+    error = None
+    stations = []
+    try:
+        result = subprocess.run(
+            [rtl_power, "-f", "87.5M:108M:200k", "-g", "40", "-i", "2", "-1", "-"],
+            capture_output=True, text=True, timeout=20,
+        )
+        raw = result.stdout
+        if result.returncode != 0:
+            error = result.stderr.strip() or f"rtl_power exited {result.returncode}"
+        else:
+            # Parse CSV: date, time, start_hz, end_hz, step_hz, samples, db...
+            by_freq: dict[float, float] = {}
+            for line in raw.splitlines():
+                parts = [p.strip() for p in line.split(",")]
+                if len(parts) < 7:
+                    continue
+                try:
+                    start_hz = float(parts[2])
+                    step_hz = float(parts[4])
+                    db_values = [float(v) for v in parts[6:] if v]
+                    for i, db in enumerate(db_values):
+                        freq_hz = start_hz + step_hz * i + step_hz / 2
+                        freq_mhz = round(freq_hz / 1e6, 1)
+                        if 87.5 <= freq_mhz <= 108.0:
+                            if freq_mhz not in by_freq or db > by_freq[freq_mhz]:
+                                by_freq[freq_mhz] = db
+                except (ValueError, IndexError):
+                    continue
+            stations = sorted(
+                [{"freq_mhz": f, "db": round(db, 1)} for f, db in by_freq.items()],
+                key=lambda x: x["freq_mhz"],
+            )
+    except subprocess.TimeoutExpired:
+        error = "rtl_power timed out."
+    except Exception as exc:
+        error = str(exc)
+    finally:
+        subprocess.run(["sudo", "systemctl", "start", "ships-ahoy-rtl-ais"], timeout=6)
+
+    return {"stations": stations, "raw": raw, "error": error}
+
 app = Flask(__name__, template_folder="../templates", static_folder="../static")
 
 # Module-level connection — set in main() before app.run()
@@ -267,6 +341,20 @@ def ticker_preview():
 def ticker_page():
     """Ticker live preview page."""
     return render_template("ticker_preview.html")
+
+
+@app.route("/sdr-verify")
+def sdr_verify():
+    """SDR hardware verification page: journal output + FM scan button."""
+    journal = _rtl_ais_journal()
+    return render_template("sdr_verify.html", journal=journal, status=_system_status())
+
+
+@app.route("/sdr-scan-fm", methods=["POST"])
+def sdr_scan_fm():
+    """Run an FM band sweep and return JSON results."""
+    result = _fm_scan()
+    return json.dumps(result), 200, {"Content-Type": "application/json"}
 
 
 @app.route("/settings", methods=["GET"])

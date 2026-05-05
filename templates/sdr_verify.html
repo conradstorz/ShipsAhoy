@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ShipsAhoy — SDR Verify</title>
+  <style>
+    body { font-family: monospace; max-width: 1000px; margin: 2em auto; }
+    nav { margin-bottom: 1em; }
+    h2 { margin-top: 1.5em; }
+    pre { background: #111; color: #cfc; padding: 1em; overflow-x: auto; font-size: 0.82em; max-height: 18em; overflow-y: scroll; border-radius: 4px; }
+    button { padding: 0.5em 1.4em; font-size: 1em; cursor: pointer; }
+    #scan-status { margin-left: 1em; color: #666; }
+    table { border-collapse: collapse; width: 100%; margin-top: 1em; }
+    th, td { border: 1px solid #ccc; padding: 0.35em 0.8em; text-align: left; }
+    th { background: #eee; }
+    .bar-cell { padding: 0.35em 0.5em; }
+    .bar { display: inline-block; height: 1em; background: #4a9; vertical-align: middle; }
+    .strong { background: #e84; }
+    .status-panel { background: #f8f8f8; border: 1px solid #ddd; padding: 0.6em 1em; margin-bottom: 1em; display: flex; flex-wrap: wrap; gap: 1.2em; align-items: center; }
+    .status-item { display: flex; align-items: center; gap: 0.4em; }
+    .dot { width: 0.7em; height: 0.7em; border-radius: 50%; display: inline-block; }
+    .dot-ok { background: #4c4; } .dot-warn { background: #f90; } .dot-off { background: #c44; }
+    .status-label { color: #555; }
+    #error-box { color: #c00; margin-top: 0.8em; }
+  </style>
+</head>
+<body>
+  <h1>ShipsAhoy — SDR Verification</h1>
+  <nav><a href="/">Ships</a> | <a href="/events">Events</a> | <a href="/settings">Settings</a> | <a href="/ticker">Ticker Preview</a></nav>
+
+  <div class="status-panel">
+    <div class="status-item">
+      <span class="status-label">Uptime:</span>
+      <strong>{{ status.uptime }}</strong>
+    </div>
+    {% set svc_labels = {
+        'ships-ahoy-rtl-ais':    'RTL-AIS',
+        'ships-ahoy-ais':        'AIS decoder',
+        'ships-ahoy-enrichment': 'Enrichment',
+        'ships-ahoy-ticker':     'Ticker'
+    } %}
+    {% for svc, label in svc_labels.items() %}
+      {% set state = status.services[svc] %}
+      <div class="status-item">
+        <span class="dot {% if state == 'active' %}dot-ok{% elif state == 'activating' %}dot-warn{% else %}dot-off{% endif %}"></span>
+        <span class="status-label">{{ label }}:</span>
+        <strong>{{ state }}</strong>
+      </div>
+    {% endfor %}
+    <div class="status-item">
+      <span class="dot {% if status.esp32_attached %}dot-ok{% else %}dot-off{% endif %}"></span>
+      <span class="status-label">ESP32:</span>
+      <strong>{% if status.esp32_attached %}attached{% else %}not detected{% endif %}</strong>
+    </div>
+  </div>
+
+  <h2>RTL-AIS Journal (recent)</h2>
+  <p>This shows what the RTL-SDR receiver is doing. You should see "Found … device(s)" and "Tuned to 162000000 Hz" to confirm the hardware is alive.</p>
+  <pre id="journal">{{ journal }}</pre>
+
+  <h2>FM Band Scan (87.5 – 108 MHz)</h2>
+  <p>Temporarily stops the AIS receiver (~5 s), sweeps the FM broadcast band with <code>rtl_power</code>, then restarts AIS. Strong peaks indicate real FM stations — proof the antenna and tuner are receiving RF signals.</p>
+  <button id="scan-btn" onclick="runScan()">Scan FM Band</button>
+  <span id="scan-status"></span>
+  <div id="error-box"></div>
+  <div id="results"></div>
+
+  <script>
+    async function runScan() {
+      const btn = document.getElementById('scan-btn');
+      const status = document.getElementById('scan-status');
+      const errBox = document.getElementById('error-box');
+      const results = document.getElementById('results');
+
+      btn.disabled = true;
+      status.textContent = 'Stopping AIS receiver, scanning… (~10 s)';
+      errBox.textContent = '';
+      results.innerHTML = '';
+
+      try {
+        const resp = await fetch('/sdr-scan-fm', { method: 'POST' });
+        const data = await resp.json();
+
+        if (data.error) {
+          errBox.textContent = 'Error: ' + data.error;
+          status.textContent = '';
+        } else if (!data.stations || data.stations.length === 0) {
+          status.textContent = 'Scan complete — no signals detected.';
+        } else {
+          status.textContent = `Scan complete — ${data.stations.length} bins.`;
+          // Find range for bar scaling
+          const dbValues = data.stations.map(s => s.db);
+          const minDb = Math.min(...dbValues);
+          const maxDb = Math.max(...dbValues);
+          const range = maxDb - minDb || 1;
+
+          // Build table
+          let html = '<table><tr><th>Frequency (MHz)</th><th>Signal (dBFS)</th><th>Level</th></tr>';
+          for (const s of data.stations) {
+            const pct = Math.max(4, Math.round(((s.db - minDb) / range) * 100));
+            const strong = s.db > (minDb + range * 0.6);
+            html += `<tr>
+              <td>${s.freq_mhz.toFixed(1)}</td>
+              <td>${s.db}</td>
+              <td class="bar-cell"><span class="bar ${strong ? 'strong' : ''}" style="width:${pct}px"></span></td>
+            </tr>`;
+          }
+          html += '</table>';
+          results.innerHTML = html;
+        }
+      } catch (e) {
+        errBox.textContent = 'Request failed: ' + e;
+        status.textContent = '';
+      } finally {
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
