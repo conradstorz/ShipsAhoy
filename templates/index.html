@@ -10,11 +10,44 @@
     th { background: #eee; }
     tr:hover { background: #f5f5f5; }
     nav { margin-bottom: 1em; }
+    .status-panel { background: #f8f8f8; border: 1px solid #ddd; padding: 0.6em 1em; margin-bottom: 1em; display: flex; flex-wrap: wrap; gap: 1.2em; align-items: center; }
+    .status-item { display: flex; align-items: center; gap: 0.4em; }
+    .dot { width: 0.7em; height: 0.7em; border-radius: 50%; display: inline-block; }
+    .dot-ok  { background: #4c4; }
+    .dot-warn { background: #f90; }
+    .dot-off { background: #c44; }
+    .status-label { color: #555; }
   </style>
 </head>
 <body>
   <h1>ShipsAhoy</h1>
   <nav><a href="/events">Events</a> | <a href="/settings">Settings</a> | <a href="/ticker">Ticker Preview</a></nav>
+
+  <div class="status-panel">
+    <div class="status-item">
+      <span class="status-label">Uptime:</span>
+      <strong>{{ status.uptime }}</strong>
+    </div>
+    {% set svc_labels = {
+        'ships-ahoy-rtl-ais':    'RTL-AIS',
+        'ships-ahoy-ais':        'AIS decoder',
+        'ships-ahoy-enrichment': 'Enrichment',
+        'ships-ahoy-ticker':     'Ticker'
+    } %}
+    {% for svc, label in svc_labels.items() %}
+      {% set state = status.services[svc] %}
+      <div class="status-item">
+        <span class="dot {% if state == 'active' %}dot-ok{% elif state == 'activating' %}dot-warn{% else %}dot-off{% endif %}"></span>
+        <span class="status-label">{{ label }}:</span>
+        <strong>{{ state }}</strong>
+      </div>
+    {% endfor %}
+    <div class="status-item">
+      <span class="dot {% if status.esp32_attached %}dot-ok{% else %}dot-off{% endif %}"></span>
+      <span class="status-label">ESP32:</span>
+      <strong>{% if status.esp32_attached %}attached{% else %}not detected{% endif %}</strong>
+    </div>
+  </div>
 
   {% if not home %}
     <p><em>Home location not set — <a href="/settings">configure it</a> to see distances.</em></p>

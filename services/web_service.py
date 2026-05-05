@@ -22,6 +22,7 @@ import argparse
 import json
 import logging
 import os
+import subprocess
 import time
 
 from flask import Flask, Response, render_template, request, redirect, url_for
@@ -44,6 +45,55 @@ from ships_ahoy.service_utils import DEFAULT_DB_PATH, configure_logging
 logger = logging.getLogger(__name__)
 
 DEFAULT_PORT = 5000
+
+ESP32_UART_DEVICE = "/dev/ttyUSB0"  # matches ships-ahoy-ticker.service ExecStart
+
+_SERVICES = [
+    "ships-ahoy-rtl-ais",
+    "ships-ahoy-ais",
+    "ships-ahoy-enrichment",
+    "ships-ahoy-ticker",
+]
+
+
+def _service_status(name: str) -> str:
+    """Return 'active', 'inactive', or 'unknown' for a systemd unit."""
+    try:
+        result = subprocess.run(
+            ["systemctl", "is-active", name],
+            capture_output=True, text=True, timeout=2
+        )
+        return result.stdout.strip() or "unknown"
+    except Exception:
+        return "unknown"
+
+
+def _system_uptime() -> str:
+    """Return a human-readable system uptime string from /proc/uptime."""
+    try:
+        with open("/proc/uptime") as f:
+            seconds = float(f.read().split()[0])
+        days, rem = divmod(int(seconds), 86400)
+        hours, rem = divmod(rem, 3600)
+        minutes = rem // 60
+        parts = []
+        if days:
+            parts.append(f"{days}d")
+        if hours or days:
+            parts.append(f"{hours}h")
+        parts.append(f"{minutes}m")
+        return " ".join(parts)
+    except Exception:
+        return "unknown"
+
+
+def _system_status() -> dict:
+    """Collect status data passed to every page that needs it."""
+    return {
+        "uptime": _system_uptime(),
+        "services": {name: _service_status(name) for name in _SERVICES},
+        "esp32_attached": os.path.exists(ESP32_UART_DEVICE),
+    }
 
 app = Flask(__name__, template_folder="../templates", static_folder="../static")
 
@@ -86,7 +136,7 @@ def index():
             ship["bearing"] = None
         ships.append(ship)
 
-    return render_template("index.html", ships=ships, home=home)
+    return render_template("index.html", ships=ships, home=home, status=_system_status())
 
 
 @app.route("/ship/<int:mmsi>")
