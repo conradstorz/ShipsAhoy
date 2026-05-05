@@ -48,8 +48,12 @@ git clone https://github.com/conradstorz/ShipsAhoy.git
 cd ShipsAhoy
 bash setup.sh
 ```
-or as an all-in-one command;
+
+or as an all-in-one command:
+
+```bash
 git clone https://github.com/conradstorz/ShipsAhoy.git && cd ShipsAhoy && bash setup.sh
+```
 
 The installer handles everything: system packages, `rtl_ais`, Python environment,
 and systemd services that start automatically on boot. Open
@@ -76,6 +80,55 @@ uv run python -m services.web_service
 ```
 
 Then open `http://localhost:5000` in your browser.
+
+---
+
+## Updating
+
+After pulling new code on the Pi, re-run the service installer to apply any changes
+to the systemd unit files:
+
+```bash
+git pull
+bash setup/05-services.sh
+```
+
+> **Why?** The service files in `systemd/` are templates containing placeholders
+> like `__USER__` and `__RTLAIS_BIN__`. `setup/05-services.sh` substitutes your
+> actual username and binary path before writing to `/etc/systemd/system/`. Copying
+> the repo file directly — or running `daemon-reload` without re-running the
+> installer — leaves the placeholders in place and the service will fail to start.
+
+---
+
+## Troubleshooting
+
+### Service fails with `status=217/USER` and `spawning __RTLAIS_BIN__`
+
+```
+ships-ahoy-rtl-ais.service: Failed at step USER spawning __RTLAIS_BIN__: No such process
+ships-ahoy-rtl-ais.service: Main process exited, code=exited, status=217/USER
+```
+
+**Cause:** The installed service file still contains the raw template placeholders
+(`__USER__`, `__RTLAIS_BIN__`). This happens when the file is updated from git
+without going through the installer's substitution step.
+
+**Fix:**
+
+```bash
+# Verify the state file from the original install is present
+cat setup/.state          # should show INSTALL_USER=, RTLAIS_BIN=, etc.
+
+# Re-install the service files with substitutions applied
+bash setup/05-services.sh
+```
+
+If `setup/.state` is missing or incomplete, re-run the full installer:
+
+```bash
+bash setup.sh
+```
 
 ---
 

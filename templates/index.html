@@ -17,6 +17,12 @@
     .dot-warn { background: #f90; }
     .dot-off { background: #c44; }
     .status-label { color: #555; }
+    .log-columns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1em; margin-bottom: 1.5em; }
+    .log-col h3 { margin: 0 0 0.3em; font-size: 0.85em; letter-spacing: 0.05em; }
+    .log-col pre { background: #111; padding: 0.6em; overflow-x: auto; overflow-y: scroll; max-height: 22em; font-size: 0.72em; margin: 0; border-radius: 4px; white-space: pre-wrap; word-break: break-all; }
+    .log-info pre  { color: #8d8; }
+    .log-warn pre  { color: #fa3; }
+    .log-error pre { color: #f66; }
   </style>
 </head>
 <body>
@@ -47,6 +53,16 @@
       <span class="status-label">ESP32:</span>
       <strong>{% if status.esp32_attached %}attached{% else %}not detected{% endif %}</strong>
     </div>
+  </div>
+
+  <div class="log-columns">
+    {% for level, css in [('INFO', 'log-info'), ('WARN', 'log-warn'), ('ERROR', 'log-error')] %}
+    <div class="log-col {{ css }}">
+      <h3>{{ level }}</h3>
+      <pre>{% for line in log_columns[level] %}{{ line }}
+{% endfor %}</pre>
+    </div>
+    {% endfor %}
   </div>
 
   {% if not home %}

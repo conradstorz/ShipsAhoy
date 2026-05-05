@@ -48,6 +48,9 @@ DEFAULT_PORT = 5000
 
 ESP32_UART_DEVICE = "/dev/ttyUSB0"  # matches ships-ahoy-ticker.service ExecStart
 
+_REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_INSTALL_LOG = os.path.join(_REPO_DIR, "setup", "install.log")
+
 _SERVICES = [
     "ships-ahoy-rtl-ais",
     "ships-ahoy-ais",
@@ -113,61 +116,81 @@ def _fm_scan() -> dict:
     """Stop rtl_ais, sweep the FM broadcast band, restart rtl_ais.
 
     Returns {'stations': [{freq_mhz, db}, ...], 'raw': str, 'error': str|None}.
-    Stations are sorted by frequency; only bins above –60 dBFS are included.
+    Stations are sorted by frequency.
     """
     rtl_power = subprocess.run(["which", "rtl_power"], capture_output=True, text=True).stdout.strip()
     if not rtl_power:
         return {"stations": [], "raw": "", "error": "rtl_power not found — install the rtl-sdr package."}
 
-    try:
-        subprocess.run(["sudo", "systemctl", "stop", "ships-ahoy-rtl-ais"],
-                       timeout=6, check=True)
-        time.sleep(0.5)
-    except Exception as exc:
-        return {"stations": [], "raw": "", "error": f"Could not stop rtl_ais service: {exc}"}
-
     raw = ""
     error = None
     stations = []
     try:
-        result = subprocess.run(
-            [rtl_power, "-f", "87.5M:108M:200k", "-g", "40", "-i", "2", "-1", "-"],
-            capture_output=True, text=True, timeout=20,
+        stop = subprocess.run(
+            ["sudo", "systemctl", "stop", "ships-ahoy-rtl-ais"],
+            capture_output=True, timeout=6,
         )
-        raw = result.stdout
-        if result.returncode != 0:
-            error = result.stderr.strip() or f"rtl_power exited {result.returncode}"
+        if stop.returncode != 0:
+            error = f"Could not stop rtl_ais service (exit {stop.returncode})"
         else:
-            # Parse CSV: date, time, start_hz, end_hz, step_hz, samples, db...
-            by_freq: dict[float, float] = {}
-            for line in raw.splitlines():
-                parts = [p.strip() for p in line.split(",")]
-                if len(parts) < 7:
-                    continue
-                try:
-                    start_hz = float(parts[2])
-                    step_hz = float(parts[4])
-                    db_values = [float(v) for v in parts[6:] if v]
-                    for i, db in enumerate(db_values):
-                        freq_hz = start_hz + step_hz * i + step_hz / 2
-                        freq_mhz = round(freq_hz / 1e6, 1)
-                        if 87.5 <= freq_mhz <= 108.0:
-                            if freq_mhz not in by_freq or db > by_freq[freq_mhz]:
-                                by_freq[freq_mhz] = db
-                except (ValueError, IndexError):
-                    continue
-            stations = sorted(
-                [{"freq_mhz": f, "db": round(db, 1)} for f, db in by_freq.items()],
-                key=lambda x: x["freq_mhz"],
+            time.sleep(0.5)
+            result = subprocess.run(
+                [rtl_power, "-f", "87.5M:108M:200k", "-g", "40", "-i", "2", "-1", "-"],
+                capture_output=True, text=True, timeout=20,
             )
-    except subprocess.TimeoutExpired:
-        error = "rtl_power timed out."
+            raw = result.stdout
+            if result.returncode != 0:
+                error = result.stderr.strip() or f"rtl_power exited {result.returncode}"
+            else:
+                # Parse CSV: date, time, start_hz, end_hz, step_hz, samples, db...
+                by_freq: dict[float, float] = {}
+                for line in raw.splitlines():
+                    parts = [p.strip() for p in line.split(",")]
+                    if len(parts) < 7:
+                        continue
+                    try:
+                        start_hz = float(parts[2])
+                        step_hz = float(parts[4])
+                        db_values = [float(v) for v in parts[6:] if v]
+                        for i, db in enumerate(db_values):
+                            freq_hz = start_hz + step_hz * i + step_hz / 2
+                            freq_mhz = round(freq_hz / 1e6, 1)
+                            if 87.5 <= freq_mhz <= 108.0:
+                                if freq_mhz not in by_freq or db > by_freq[freq_mhz]:
+                                    by_freq[freq_mhz] = db
+                    except (ValueError, IndexError):
+                        continue
+                stations = sorted(
+                    [{"freq_mhz": f, "db": round(db, 1)} for f, db in by_freq.items()],
+                    key=lambda x: x["freq_mhz"],
+                )
+    except subprocess.TimeoutExpired as exc:
+        error = f"Timed out: {exc}"
     except Exception as exc:
         error = str(exc)
     finally:
         subprocess.run(["sudo", "systemctl", "start", "ships-ahoy-rtl-ais"], timeout=6)
 
     return {"stations": stations, "raw": raw, "error": error}
+
+
+def _install_log_by_level(n: int = 25) -> dict:
+    """Return the last n lines per level from setup/install.log."""
+    buckets: dict[str, list[str]] = {"INFO": [], "WARN": [], "ERROR": []}
+    try:
+        with open(_INSTALL_LOG) as f:
+            for raw_line in f:
+                line = raw_line.rstrip()
+                for level in buckets:
+                    if f"[{level}]" in line:
+                        buckets[level].append(line)
+                        break
+    except FileNotFoundError:
+        return {lvl: ["(setup/install.log not found)"] for lvl in buckets}
+    except Exception as exc:
+        return {lvl: [f"(error: {exc})"] for lvl in buckets}
+    return {lvl: lines[-n:] for lvl, lines in buckets.items()}
+
 
 app = Flask(__name__, template_folder="../templates", static_folder="../static")
 
@@ -210,7 +233,9 @@ def index():
             ship["bearing"] = None
         ships.append(ship)
 
-    return render_template("index.html", ships=ships, home=home, status=_system_status())
+    return render_template("index.html", ships=ships, home=home,
+                           status=_system_status(),
+                           log_columns=_install_log_by_level())
 
 
 @app.route("/ship/<int:mmsi>")
