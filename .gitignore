@@ -44,3 +44,7 @@ CLAUDE.md
 
 # Git worktrees
 .worktrees/
+
+# Setup — instance-specific generated files
+setup/.state
+setup/install.log

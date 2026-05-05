@@ -1,0 +1,16 @@
+[project]
+name = "ships-ahoy"
+version = "0.1.0"
+description = "Live maritime AIS ship tracking via RTL-SDR"
+requires-python = ">=3.10"
+dependencies = [
+    "pyais>=2.8.0",
+    "flask>=3.0",
+    "requests>=2.31",
+    "beautifulsoup4>=4.12",
+    "pyserial>=3.5",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
