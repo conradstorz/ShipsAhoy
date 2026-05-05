@@ -286,7 +286,7 @@ def main() -> None:
     configure_logging(args.verbose)
 
     _db_path = args.db
-    _conn = init_db(args.db)
+    _conn = init_db(args.db, check_same_thread=False)
     _cfg = Config(_conn)
 
     logger.info("Web service starting on port %d", args.port)

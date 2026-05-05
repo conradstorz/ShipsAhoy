@@ -123,7 +123,7 @@ def _now_iso() -> str:
     return datetime.now().isoformat()
 
 
-def init_db(path: str) -> sqlite3.Connection:
+def init_db(path: str, check_same_thread: bool = True) -> sqlite3.Connection:
     """Create all tables, enable WAL mode, seed default settings, and return the connection.
 
     Parameters
@@ -136,7 +136,7 @@ def init_db(path: str) -> sqlite3.Connection:
     sqlite3.Connection
         Open connection with WAL mode enabled and row_factory set to sqlite3.Row.
     """
-    conn = sqlite3.connect(path)
+    conn = sqlite3.connect(path, check_same_thread=check_same_thread)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute(_CREATE_SHIPS)
