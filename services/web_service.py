@@ -174,6 +174,68 @@ def _fm_scan() -> dict:
     return {"stations": stations, "raw": raw, "error": error}
 
 
+def _ais_band_scan() -> dict:
+    """Stop rtl_ais, sweep 159–165 MHz at 25 kHz resolution, restart rtl_ais.
+
+    Returns {'bins': [{freq_mhz, db}, ...], 'raw': str, 'error': str|None}.
+    AIS channels are at 161.975 MHz (Ch 87B) and 162.025 MHz (Ch 88B).
+    NOAA weather radio occupies 162.400–162.550 MHz and will appear as a strong peak.
+    """
+    rtl_power = subprocess.run(["which", "rtl_power"], capture_output=True, text=True).stdout.strip()
+    if not rtl_power:
+        return {"bins": [], "raw": "", "error": "rtl_power not found — install the rtl-sdr package."}
+
+    raw = ""
+    error = None
+    bins = []
+    try:
+        stop = subprocess.run(
+            ["sudo", "systemctl", "stop", "ships-ahoy-rtl-ais"],
+            capture_output=True, timeout=6,
+        )
+        if stop.returncode != 0:
+            error = f"Could not stop rtl_ais service (exit {stop.returncode})"
+        else:
+            time.sleep(0.5)
+            result = subprocess.run(
+                [rtl_power, "-f", "159M:165M:25k", "-g", "50", "-i", "5", "-1", "-"],
+                capture_output=True, text=True, timeout=30,
+            )
+            raw = result.stdout
+            if result.returncode != 0:
+                error = result.stderr.strip() or f"rtl_power exited {result.returncode}"
+            else:
+                by_freq: dict[float, float] = {}
+                for line in raw.splitlines():
+                    parts = [p.strip() for p in line.split(",")]
+                    if len(parts) < 7:
+                        continue
+                    try:
+                        start_hz = float(parts[2])
+                        step_hz = float(parts[4])
+                        db_values = [float(v) for v in parts[6:] if v]
+                        for i, db in enumerate(db_values):
+                            freq_hz = start_hz + step_hz * i + step_hz / 2
+                            freq_mhz = round(freq_hz / 1e6, 3)
+                            if 159.0 <= freq_mhz <= 165.0:
+                                if freq_mhz not in by_freq or db > by_freq[freq_mhz]:
+                                    by_freq[freq_mhz] = db
+                    except (ValueError, IndexError):
+                        continue
+                bins = sorted(
+                    [{"freq_mhz": f, "db": round(db, 1)} for f, db in by_freq.items()],
+                    key=lambda x: x["freq_mhz"],
+                )
+    except subprocess.TimeoutExpired as exc:
+        error = f"Timed out: {exc}"
+    except Exception as exc:
+        error = str(exc)
+    finally:
+        subprocess.run(["sudo", "systemctl", "start", "ships-ahoy-rtl-ais"], timeout=6)
+
+    return {"bins": bins, "raw": raw, "error": error}
+
+
 def _install_log_by_level(n: int = 25) -> dict:
     """Return the last n lines per level from setup/install.log."""
     buckets: dict[str, list[str]] = {"INFO": [], "WARN": [], "ERROR": []}
@@ -379,6 +441,13 @@ def sdr_verify():
 def sdr_scan_fm():
     """Run an FM band sweep and return JSON results."""
     result = _fm_scan()
+    return json.dumps(result), 200, {"Content-Type": "application/json"}
+
+
+@app.route("/sdr-scan-ais", methods=["POST"])
+def sdr_scan_ais():
+    """Run an AIS-band power sweep (159–165 MHz) and return JSON results."""
+    result = _ais_band_scan()
     return json.dumps(result), 200, {"Content-Type": "application/json"}
 
 
