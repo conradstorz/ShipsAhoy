@@ -9,7 +9,7 @@ If you want to use this software in a commercial or proprietary product and cann
 To request commercial licensing terms, contact:
 
 - Name: Conrad Storz
-- Email: <replace-with-contact-email>
+- Email: ConradStorz@gmail.com
 
 ## Scope
 
