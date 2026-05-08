@@ -236,22 +236,22 @@ def _ais_band_scan() -> dict:
     return {"bins": bins, "raw": raw, "error": error}
 
 
-def _install_log_by_level(n: int = 25) -> dict:
-    """Return the last n lines per level from setup/install.log."""
-    buckets: dict[str, list[str]] = {"INFO": [], "WARN": [], "ERROR": []}
+def _install_log_entries(n: int = 75) -> list[tuple[str, str]]:
+    """Return the last n log entries from setup/install.log as (level, line) pairs."""
+    entries: list[tuple[str, str]] = []
     try:
         with open(_INSTALL_LOG) as f:
             for raw_line in f:
                 line = raw_line.rstrip()
-                for level in buckets:
+                for level in ("INFO", "WARN", "ERROR"):
                     if f"[{level}" in line:
-                        buckets[level].append(line)
+                        entries.append((level, line))
                         break
     except FileNotFoundError:
-        return {lvl: ["(setup/install.log not found)"] for lvl in buckets}
+        return [("ERROR", "(setup/install.log not found)")]
     except Exception as exc:
-        return {lvl: [f"(error: {exc})"] for lvl in buckets}
-    return {lvl: lines[-n:] for lvl, lines in buckets.items()}
+        return [("ERROR", f"(error: {exc})")]
+    return entries[-n:][::-1]
 
 
 app = Flask(__name__, template_folder="../templates", static_folder="../static")
@@ -297,7 +297,7 @@ def index():
 
     return render_template("index.html", ships=ships, home=home,
                            status=_system_status(),
-                           log_columns=_install_log_by_level())
+                           log_entries=_install_log_entries())
 
 
 @app.route("/ship/<int:mmsi>")

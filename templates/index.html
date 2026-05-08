@@ -17,12 +17,13 @@
     .dot-warn { background: #f90; }
     .dot-off { background: #c44; }
     .status-label { color: #555; }
-    .log-columns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1em; margin-bottom: 1.5em; }
-    .log-col h3 { margin: 0 0 0.3em; font-size: 0.85em; letter-spacing: 0.05em; }
-    .log-col pre { background: #111; padding: 0.6em; overflow-x: auto; overflow-y: scroll; max-height: 22em; font-size: 0.72em; margin: 0; border-radius: 4px; white-space: pre-wrap; word-break: break-all; }
-    .log-info pre  { color: #8d8; }
-    .log-warn pre  { color: #fa3; }
-    .log-error pre { color: #f66; }
+    .log-window { background: #111; padding: 0.6em; overflow-y: scroll; max-height: 22em; font-size: 0.72em; border-radius: 4px; margin-bottom: 1.5em; }
+    .log-window pre { margin: 0; white-space: pre-wrap; word-break: break-all; }
+    .ll-info  { color: #8d8; }
+    .ll-warn  { color: #fa3; }
+    .ll-error { color: #f66; }
+    .log-cursor::after { content: '█'; color: #8d8; animation: blink 1s step-start infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
   </style>
 </head>
 <body>
@@ -55,15 +56,9 @@
     </div>
   </div>
 
-  <div class="log-columns">
-    {% for level, css in [('INFO', 'log-info'), ('WARN', 'log-warn'), ('ERROR', 'log-error')] %}
-    <div class="log-col {{ css }}">
-      <h3>{{ level }}</h3>
-      <pre>{% for line in log_columns[level] %}{{ line }}
-{% endfor %}</pre>
-    </div>
-    {% endfor %}
-  </div>
+  <div class="log-window"><pre><span class="log-cursor"></span>
+{% for level, line in log_entries %}<span class="ll-{{ level.lower() }}">{{ line }}</span>
+{% endfor %}</pre></div>
 
   {% if not home %}
     <p><em>Home location not set — <a href="/settings">configure it</a> to see distances.</em></p>
