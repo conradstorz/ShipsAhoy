@@ -38,7 +38,8 @@ from ships_ahoy.db import (
     get_visit_history,
     get_display_state,
 )
-from ships_ahoy.distance import distance_info
+import geonamescache as _gnc
+from ships_ahoy.distance import distance_info, haversine_km
 from ships_ahoy.matrix_driver import PreviewDriver, ESP32_DISPLAY_WIDTH, ESP32_DISPLAY_HEIGHT
 from ships_ahoy.service_utils import DEFAULT_DB_PATH, configure_logging
 
@@ -254,6 +255,24 @@ def _install_log_entries(n: int = 75) -> list[tuple[str, str]]:
     return entries[-n:][::-1]
 
 
+_gc = _gnc.GeonamesCache()
+
+
+def _cities_in_range(home_lat: float, home_lon: float, radius_km: float, n: int = 3) -> list[dict]:
+    """Return the n most populous cities within radius_km of home."""
+    nearby = []
+    for city in _gc.get_cities().values():
+        dist = haversine_km(home_lat, home_lon, float(city["latitude"]), float(city["longitude"]))
+        if dist <= radius_km:
+            nearby.append({
+                "name": city["name"],
+                "population": city["population"],
+                "distance_km": round(dist, 1),
+            })
+    nearby.sort(key=lambda c: c["population"], reverse=True)
+    return nearby[:n]
+
+
 app = Flask(__name__, template_folder="../templates", static_folder="../static")
 
 # Module-level connection — set in main() before app.run()
@@ -295,9 +314,12 @@ def index():
             ship["bearing"] = None
         ships.append(ship)
 
+    nearby_cities = _cities_in_range(home[0], home[1], cfg.distance_km) if home else []
+
     return render_template("index.html", ships=ships, home=home,
                            status=_system_status(),
-                           log_entries=_install_log_entries())
+                           log_entries=_install_log_entries(),
+                           nearby_cities=nearby_cities)
 
 
 @app.route("/ship/<int:mmsi>")

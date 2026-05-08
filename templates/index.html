@@ -54,6 +54,12 @@
       <span class="status-label">ESP32:</span>
       <strong>{% if status.esp32_attached %}attached{% else %}not detected{% endif %}</strong>
     </div>
+    {% if nearby_cities %}
+    <div class="status-item">
+      <span class="status-label">Nearby cities:</span>
+      <strong>{% for city in nearby_cities %}{{ city.name }} ({{ city.distance_km }} km){% if not loop.last %}, {% endif %}{% endfor %}</strong>
+    </div>
+    {% endif %}
   </div>
 
   <div class="log-window"><pre><span class="log-cursor"></span>

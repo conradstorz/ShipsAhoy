@@ -9,6 +9,7 @@ dependencies = [
     "requests>=2.31",
     "beautifulsoup4>=4.12",
     "pyserial>=3.5",
+    "geonamescache>=1.3",
 ]
 
 [build-system]
