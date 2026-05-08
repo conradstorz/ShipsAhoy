@@ -1,15 +1,22 @@
 """Shared utilities for ShipsAhoy services.
 
-Provides a single source of truth for the default database path and
-the logging configuration used by all four services.
+Provides a single source of truth for the default database path,
+the runtime log file path, and the logging configuration used by all
+four services.
 """
 
 import logging
 import sys
+from pathlib import Path
 
 from loguru import logger
 
 DEFAULT_DB_PATH = "ships.db"
+
+# Runtime log written by all services; read by the web dashboard.
+LOG_FILE = Path(__file__).resolve().parent.parent / "logs" / "runtime.log"
+
+_LOG_FORMAT = "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name} — {message}"
 
 
 class _InterceptHandler(logging.Handler):
@@ -34,6 +41,7 @@ class _InterceptHandler(logging.Handler):
 def configure_logging(verbose: bool) -> None:
     """Configure loguru as the sole logging sink, intercepting stdlib logging."""
     level = "DEBUG" if verbose else "INFO"
+    LOG_FILE.parent.mkdir(exist_ok=True)
     logger.remove()
     logger.add(
         sys.stderr,
@@ -45,5 +53,13 @@ def configure_logging(verbose: bool) -> None:
             "<cyan>{name}</cyan> — "
             "<level>{message}</level>"
         ),
+    )
+    logger.add(
+        LOG_FILE,
+        level=level,
+        rotation="10 MB",
+        retention=3,
+        encoding="utf-8",
+        format=_LOG_FORMAT,
     )
     logging.basicConfig(handlers=[_InterceptHandler()], level=0, force=True)

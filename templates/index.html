@@ -17,13 +17,17 @@
     .dot-warn { background: #f90; }
     .dot-off { background: #c44; }
     .status-label { color: #555; }
-    .log-window { background: #111; padding: 0.6em; overflow-y: scroll; max-height: 22em; font-size: 0.72em; border-radius: 4px; margin-bottom: 1.5em; }
+    .log-window { background: #111; padding: 0.6em; overflow-y: scroll; max-height: 22em; font-size: 0.72em; border-radius: 4px; margin-bottom: 0.4em; }
     .log-window pre { margin: 0; white-space: pre-wrap; word-break: break-all; }
     .ll-info  { color: #8d8; }
     .ll-warn  { color: #fa3; }
     .ll-error { color: #f66; }
     .log-cursor::after { content: '█'; color: #8d8; animation: blink 1s step-start infinite; }
     @keyframes blink { 50% { opacity: 0; } }
+    .log-label { font-size: 0.8em; color: #888; margin: 0 0 0.25em; }
+    details.install-log { margin-bottom: 1.5em; }
+    details.install-log summary { font-size: 0.8em; color: #888; cursor: pointer; margin-bottom: 0.25em; }
+    details.install-log .log-window { max-height: 12em; margin-bottom: 0; }
   </style>
 </head>
 <body>
@@ -62,9 +66,16 @@
     {% endif %}
   </div>
 
+  <p class="log-label">Runtime Log</p>
   <div class="log-window"><pre><span class="log-cursor"></span>
-{% for level, line in log_entries %}<span class="ll-{{ level.lower() }}">{{ line }}</span>
+{% for level, line in runtime_entries %}<span class="ll-{{ level.lower() }}">{{ line }}</span>
 {% endfor %}</pre></div>
+
+  <details class="install-log">
+    <summary>Install Log</summary>
+    <div class="log-window"><pre>{% for level, line in log_entries %}<span class="ll-{{ level.lower() }}">{{ line }}</span>
+{% endfor %}</pre></div>
+  </details>
 
   {% if not home %}
     <p><em>Home location not set — <a href="/settings">configure it</a> to see distances.</em></p>

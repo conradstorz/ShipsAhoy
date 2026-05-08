@@ -49,6 +49,7 @@ ESP32_UART_DEVICE = "/dev/ttyUSB0"  # matches ships-ahoy-ticker.service ExecStar
 
 _REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _INSTALL_LOG = os.path.join(_REPO_DIR, "setup", "install.log")
+_RUNTIME_LOG = os.path.join(_REPO_DIR, "logs", "runtime.log")
 
 _SERVICES = [
     "ships-ahoy-rtl-ais",
@@ -253,6 +254,36 @@ def _install_log_entries(n: int = 75) -> list[tuple[str, str]]:
     return entries[-n:][::-1]
 
 
+def _runtime_log_entries(n: int = 100) -> list[tuple[str, str]]:
+    """Return the last n entries from logs/runtime.log as (level, line) pairs.
+
+    Parses loguru's pipe-delimited format:
+        2026-05-07 21:03:21 | INFO     | ships_ahoy.db — Database opened: ships.db
+    """
+    entries: list[tuple[str, str]] = []
+    try:
+        with open(_RUNTIME_LOG, encoding="utf-8") as f:
+            for raw_line in f:
+                line = raw_line.rstrip()
+                parts = line.split(" | ", 2)
+                if len(parts) >= 2:
+                    lvl = parts[1].strip()
+                    if lvl.startswith("WARNING") or lvl.startswith("WARN"):
+                        level = "WARN"
+                    elif lvl.startswith("ERROR") or lvl.startswith("CRITICAL"):
+                        level = "ERROR"
+                    else:
+                        level = "INFO"
+                else:
+                    level = "INFO"
+                entries.append((level, line))
+    except FileNotFoundError:
+        return [("WARN", "(logs/runtime.log not found — services have not run yet)")]
+    except Exception as exc:
+        return [("ERROR", f"(error reading runtime log: {exc})")]
+    return entries[-n:][::-1]
+
+
 _gc = _gnc.GeonamesCache()
 
 
@@ -316,6 +347,7 @@ def index():
 
     return render_template("index.html", ships=ships, home=home,
                            status=_system_status(),
+                           runtime_entries=_runtime_log_entries(),
                            log_entries=_install_log_entries(),
                            nearby_cities=nearby_cities)
 
