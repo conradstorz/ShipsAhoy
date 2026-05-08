@@ -22,12 +22,12 @@ Usage::
 """
 
 import argparse
-import logging
 import socket
 import sys
 import time
 from datetime import datetime, timedelta
 
+from loguru import logger
 
 from ships_ahoy.ais_receiver import AISReceiver, DEFAULT_HOST, DEFAULT_TCP_PORT
 from ships_ahoy.config import Config
@@ -36,8 +36,6 @@ from ships_ahoy.distance import is_noteworthy
 from ships_ahoy.events import EventType, detect_events
 from ships_ahoy.service_utils import DEFAULT_DB_PATH, configure_logging
 from ships_ahoy.ship_tracker import ShipInfo, ShipTracker
-
-logger = logging.getLogger(__name__)
 
 SWEEP_INTERVAL_SEC = 300  # 5 minutes
 MAX_BACKOFF_SEC = 60
@@ -71,11 +69,11 @@ def _connect_with_backoff(host: str, port: int, use_udp: bool) -> AISReceiver:
                 # Verify TCP reachability before returning the receiver
                 s = socket.create_connection((host, port), timeout=5)
                 s.close()
-            logger.info("Connected to AIS source %s:%d (udp=%s)", host, port, use_udp)
+            logger.info("Connected to AIS source {}:{} (udp={})", host, port, use_udp)
             return AISReceiver(host=host, port=port, use_udp=use_udp)
         except Exception as exc:
             logger.warning(
-                "Cannot reach AIS source %s:%d: %s. Retrying in %ds", host, port, exc, delay
+                "Cannot reach AIS source {}:{}: {}. Retrying in {}s", host, port, exc, delay
             )
             time.sleep(delay)
             delay = min(delay * 2, MAX_BACKOFF_SEC)
@@ -87,9 +85,9 @@ def _run_stale_sweep(conn, cfg: Config) -> None:
     for mmsi in get_stale_mmsis(conn, threshold):
         try:
             mark_ship_departed(conn, mmsi)
-            logger.info("Stale sweep: marked MMSI %d as departed", mmsi)
+            logger.info("Stale sweep: marked MMSI {} as departed", mmsi)
         except Exception:
-            logger.exception("Stale sweep: error marking MMSI %d as departed", mmsi)
+            logger.exception("Stale sweep: error marking MMSI {} as departed", mmsi)
 
 
 def _process_message(conn, msg, cfg: Config) -> None:
@@ -126,6 +124,7 @@ def _process_message(conn, msg, cfg: Config) -> None:
         # First time we've seen this ship
         write_event(conn, new_ship.mmsi, EventType.ARRIVED, f"{new_ship.name} arrived")
         record_visit(conn, new_ship.mmsi)
+        logger.info("ARRIVED: {} (MMSI {})", new_ship.name, new_ship.mmsi)
     else:
         # Compare against previous state
         old_ship = ShipInfo(
@@ -145,7 +144,7 @@ def main() -> None:
     conn = init_db(args.db)
     cfg = Config(conn)
 
-    logger.info("AIS service starting. DB: %s", args.db)
+    logger.info("AIS service starting. DB: {}", args.db)
 
     last_sweep = time.monotonic()
 

@@ -19,6 +19,7 @@ import sqlite3
 from datetime import datetime
 from typing import Optional
 
+from loguru import logger
 from ships_ahoy.ship_tracker import ShipInfo
 
 
@@ -170,6 +171,7 @@ def init_db(path: str, check_same_thread: bool = True) -> sqlite3.Connection:
         _DEFAULT_SETTINGS,
     )
     conn.commit()
+    logger.info("Database opened: {}", path)
     return conn
 
 
@@ -410,6 +412,7 @@ def mark_ship_departed(conn: sqlite3.Connection, mmsi: int) -> None:
     _write_event_sql(conn, mmsi, "DEPARTED", f"Ship {mmsi} departed")
     _close_visit_sql(conn, mmsi)
     conn.commit()
+    logger.info("DEPARTED: MMSI {}", mmsi)
 
 
 def increment_fetch_attempts(conn: sqlite3.Connection, mmsi: int) -> None:

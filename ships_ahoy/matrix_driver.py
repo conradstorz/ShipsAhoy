@@ -22,9 +22,8 @@ Usage::
 """
 
 import abc
-import logging
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 # HUB75 panel configuration constants
 PANEL_WIDTH = 64
@@ -61,18 +60,18 @@ class StubMatrixDriver(MatrixDriver):
     """No-op MatrixDriver for development and testing on non-Pi hardware."""
 
     def scroll_text(self, text: str, speed_px_per_sec: float) -> None:
-        logger.info("[StubMatrixDriver] scroll_text: %s (%.1f px/s)", text, speed_px_per_sec)
+        logger.info("[StubMatrixDriver] scroll_text: {} ({:.1f} px/s)", text, speed_px_per_sec)
         print(f"[TICKER] {text}")
 
     def clear(self) -> None:
         logger.debug("[StubMatrixDriver] clear()")
 
     def show_static(self, text: str, duration_sec: float) -> None:
-        logger.info("[StubMatrixDriver] show_static: %s (%.1fs)", text, duration_sec)
+        logger.info("[StubMatrixDriver] show_static: {} ({:.1f}s)", text, duration_sec)
         print(f"[TICKER IDLE] {text}")
 
     def send_frame(self, pixels: bytes, width: int, height: int) -> None:
-        logger.debug("[StubMatrixDriver] send_frame: %dx%d (%d bytes)", width, height, len(pixels))
+        logger.debug("[StubMatrixDriver] send_frame: {}x{} ({} bytes)", width, height, len(pixels))
 
 
 class RGBMatrixDriver(MatrixDriver):
@@ -182,9 +181,9 @@ class ESP32Driver(MatrixDriver):
         try:
             self._serial = serial.Serial(self._port, self._baud, timeout=self._ack_timeout_sec)
             self._connected = True
-            logger.info("ESP32Driver: connected to %s at %d baud", self._port, self._baud)
+            logger.info("ESP32Driver: connected to {} at {} baud", self._port, self._baud)
         except Exception as exc:
-            logger.error("ESP32Driver: cannot open %s: %s", self._port, exc)
+            logger.error("ESP32Driver: cannot open {}: {}", self._port, exc)
             self._connected = False
 
     def _send(self, packet: bytes) -> bool:
@@ -204,12 +203,12 @@ class ESP32Driver(MatrixDriver):
             if response == bytes([ACK]):
                 return True
             if response == bytes([NACK]):
-                logger.warning("ESP32Driver: NACK received for cmd=0x%02X", packet[1])
+                logger.warning("ESP32Driver: NACK received for cmd={:#04x}", packet[1])
             else:
-                logger.warning("ESP32Driver: ACK timeout for cmd=0x%02X", packet[1])
+                logger.warning("ESP32Driver: ACK timeout for cmd={:#04x}", packet[1])
             return False
         except Exception as exc:
-            logger.error("ESP32Driver: serial error: %s", exc)
+            logger.error("ESP32Driver: serial error: {}", exc)
             self._connected = False
             return False
 

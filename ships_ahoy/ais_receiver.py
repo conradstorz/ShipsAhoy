@@ -20,13 +20,11 @@ The default port 10110 is the standard NMEA network port used by ``rtl_ais``
 when started with the ``-T`` flag.
 """
 
-import logging
 from typing import Generator, Union
 
+from loguru import logger
 from pyais.messages import ANY_MESSAGE
 from pyais.stream import TCPConnection, UDPReceiver
-
-logger = logging.getLogger(__name__)
 
 DEFAULT_HOST = "localhost"
 DEFAULT_TCP_PORT = 10110
@@ -71,10 +69,10 @@ class AISReceiver:
             If a TCP connection cannot be established.
         """
         if self.use_udp:
-            logger.info("Listening for AIS UDP datagrams on %s:%d", self.host, self.port)
+            logger.info("Listening for AIS UDP datagrams on {}:{}", self.host, self.port)
             connection: Union[UDPReceiver, TCPConnection] = UDPReceiver(self.host, self.port)
         else:
-            logger.info("Connecting to AIS TCP source at %s:%d", self.host, self.port)
+            logger.info("Connecting to AIS TCP source at {}:{}", self.host, self.port)
             connection = TCPConnection(self.host, self.port)
 
         with connection as stream:
@@ -83,4 +81,4 @@ class AISReceiver:
                     decoded = nmea_msg.decode()
                     yield decoded
                 except Exception as exc:
-                    logger.debug("Could not decode AIS message: %s", exc)
+                    logger.debug("Could not decode AIS message: {}", exc)

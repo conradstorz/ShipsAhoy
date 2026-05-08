@@ -22,10 +22,11 @@ Usage::
 """
 
 import argparse
-import logging
 import sys
 import time
 from datetime import datetime, timedelta
+
+from loguru import logger
 
 from ships_ahoy.config import Config
 from ships_ahoy.db import (
@@ -42,12 +43,10 @@ from ships_ahoy.db import (
 from ships_ahoy.events import format_ticker_message
 from ships_ahoy.service_utils import DEFAULT_DB_PATH, configure_logging
 
-try:
+try:  # noqa: E402
     from ships_ahoy.matrix_driver import RGBMatrixDriver as _DriverClass
 except (ImportError, NotImplementedError):
     from ships_ahoy.matrix_driver import StubMatrixDriver as _DriverClass  # type: ignore[assignment]
-
-logger = logging.getLogger(__name__)
 
 POLL_INTERVAL_SEC = 2
 OVERFLOW_THRESHOLD = 10   # "more than 10" means > 10 (fires at 11+)
@@ -84,7 +83,7 @@ def _handle_overflow(conn, events, driver, cfg: Config) -> None:
         driver.scroll_text(msg, speed_px_per_sec=cfg.scroll_speed)
         write_display_state(conn, text=msg, speed=cfg.scroll_speed,
                             mode="scroll", duration_ms=0)
-        logger.info("Overflow: flushed %d stale events", flushed)
+        logger.info("Overflow: flushed {} stale events", flushed)
     else:
         # All events are recent — display the oldest one to drain the queue
         _display_event(conn, events[0], driver, cfg)
@@ -98,6 +97,7 @@ def _display_event(conn, event_row, driver, cfg: Config) -> None:
         return
     enrichment_row = get_enrichment(conn, event_row["mmsi"])
     text = format_ticker_message(event_row, ship_row, enrichment_row)
+    logger.info("Ticker: {} [{}]", text, event_row["event_type"])
     driver.scroll_text(text, speed_px_per_sec=cfg.scroll_speed)
     write_display_state(conn, text=text, speed=cfg.scroll_speed,
                         mode="scroll", duration_ms=0)
@@ -128,7 +128,7 @@ def main() -> None:
     if args.esp32_port:
         from ships_ahoy.matrix_driver import ESP32Driver
         driver = ESP32Driver(port=args.esp32_port)
-        logger.info("Using ESP32Driver on %s", args.esp32_port)
+        logger.info("Using ESP32Driver on {}", args.esp32_port)
     else:
         driver = _DriverClass()
 

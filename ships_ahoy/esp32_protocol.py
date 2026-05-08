@@ -10,9 +10,7 @@ CRC8 polynomial 0x31, initial value 0x00, no input/output reflection
 (a non-standard variant; the ESP32 firmware must implement the same variant).
 """
 
-import logging
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 # Command identifiers (Pi → ESP32)
 CMD_SCROLL     = 0x01
@@ -80,7 +78,7 @@ def encode_text(text: str) -> bytes:
         elif ord(ch) < 128:
             result.extend(ch.encode("ascii"))
         else:
-            logger.debug("encode_text: non-ASCII character %r stripped", ch)
+            logger.debug("encode_text: non-ASCII character {!r} stripped", ch)
     return bytes(result)
 
 
@@ -92,7 +90,7 @@ def encode_packet(cmd: int, payload: bytes) -> bytes:
     """
     if len(payload) > MAX_PAYLOAD_BYTES:
         logger.warning(
-            "encode_packet cmd=0x%02X: payload %d bytes exceeds %d; truncating",
+            "encode_packet cmd={:#04x}: payload {} bytes exceeds {}; truncating",
             cmd, len(payload), MAX_PAYLOAD_BYTES,
         )
         payload = payload[:MAX_PAYLOAD_BYTES]

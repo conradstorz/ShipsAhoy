@@ -20,7 +20,6 @@ Usage::
 
 import argparse
 import json
-import logging
 import os
 import subprocess
 import time
@@ -39,11 +38,10 @@ from ships_ahoy.db import (
     get_display_state,
 )
 import geonamescache as _gnc
+from loguru import logger
 from ships_ahoy.distance import distance_info, haversine_km
 from ships_ahoy.matrix_driver import PreviewDriver, ESP32_DISPLAY_WIDTH, ESP32_DISPLAY_HEIGHT
 from ships_ahoy.service_utils import DEFAULT_DB_PATH, configure_logging
-
-logger = logging.getLogger(__name__)
 
 DEFAULT_PORT = 5000
 
@@ -508,7 +506,7 @@ def settings_post():
                 float(value)  # validate before storing
                 cfg.set(key, value)
             except ValueError:
-                logger.warning("Settings: invalid float for %s: %r — ignored", key, value)
+                logger.warning("Settings: invalid float for {}: {!r} — ignored", key, value)
 
     for key in int_keys:
         value = request.form.get(key, "").strip()
@@ -517,7 +515,7 @@ def settings_post():
                 int(value)  # validate before storing
                 cfg.set(key, value)
             except ValueError:
-                logger.warning("Settings: invalid int for %s: %r — ignored", key, value)
+                logger.warning("Settings: invalid int for {}: {!r} — ignored", key, value)
 
     return redirect(url_for("settings_get"))
 
@@ -543,7 +541,7 @@ def main() -> None:
     _conn = init_db(args.db, check_same_thread=False)
     _cfg = Config(_conn)
 
-    logger.info("Web service starting on port %d", args.port)
+    logger.info("Web service starting on port {}", args.port)
     # threaded=True allows SSE connections to stream while other routes remain
     # responsive. Each SSE generator opens its own SQLite connection (WAL mode
     # supports concurrent reads) so _conn is not accessed from SSE threads.

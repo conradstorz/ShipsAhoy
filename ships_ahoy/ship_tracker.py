@@ -5,14 +5,12 @@ Each ship is identified by its MMSI (Maritime Mobile Service Identity) and
 updated whenever a new AIS position or static-data message arrives.
 """
 
-import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, Optional
 
+from loguru import logger
 from pyais.messages import ANY_MESSAGE
-
-logger = logging.getLogger(__name__)
 
 # Sentinel values defined by the AIS standard that mean "not available".
 _LAT_UNAVAILABLE = 91.0
@@ -150,6 +148,7 @@ class ShipTracker:
         mmsi = int(mmsi)
         if mmsi not in self._ships:
             self._ships[mmsi] = ShipInfo(mmsi=mmsi)
+            logger.debug("First contact: MMSI {}", mmsi)
 
         ship = self._ships[mmsi]
         ship.last_seen = datetime.now()

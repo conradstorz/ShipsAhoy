@@ -19,19 +19,15 @@ Press **Ctrl-C** to stop.
 """
 
 import argparse
-import logging
 import sys
 import time
 
+from loguru import logger
+
 from ships_ahoy.ais_receiver import AISReceiver, DEFAULT_HOST, DEFAULT_TCP_PORT, DEFAULT_UDP_PORT
 from ships_ahoy.display import display_ships
+from ships_ahoy.service_utils import configure_logging
 from ships_ahoy.ship_tracker import ShipTracker
-
-logging.basicConfig(
-    level=logging.WARNING,
-    format="%(asctime)s  %(name)s  %(levelname)s  %(message)s",
-)
-logger = logging.getLogger(__name__)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -78,9 +74,7 @@ def _build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     """Application entry point."""
     args = _build_parser().parse_args()
-
-    if args.verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
+    configure_logging(args.verbose)
 
     tracker = ShipTracker()
     receiver = AISReceiver(host=args.host, port=args.port, use_udp=args.udp)

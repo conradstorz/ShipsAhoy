@@ -26,7 +26,6 @@ Usage::
 """
 
 import argparse
-import logging
 import sys
 import time
 from pathlib import Path
@@ -34,13 +33,12 @@ from typing import Optional
 
 import requests
 from bs4 import BeautifulSoup
+from loguru import logger
 
 from ships_ahoy.config import Config
 from ships_ahoy.db import init_db, get_unenriched_ships, increment_fetch_attempts, save_enrichment, write_event
 from ships_ahoy.events import EventType
 from ships_ahoy.service_utils import DEFAULT_DB_PATH, configure_logging
-
-logger = logging.getLogger(__name__)
 
 DEFAULT_PHOTOS_DIR = "static/photos"
 _HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; ShipsAhoy/1.0)"}
@@ -211,10 +209,10 @@ def _process_one_ship(conn, mmsi: int, photos_dir: Path) -> None:
         save_enrichment(conn, mmsi, data)
         write_event(conn, mmsi, EventType.ENRICHED,
                     f"New enrichment data for MMSI {mmsi}")
-        logger.info("Enriched MMSI %d from %s", mmsi, data.get("source"))
+        logger.info("Enriched MMSI {} from {}", mmsi, data.get("source"))
     else:
         increment_fetch_attempts(conn, mmsi)
-        logger.debug("No data found for MMSI %d", mmsi)
+        logger.debug("No data found for MMSI {}", mmsi)
 
 
 def _enrich_ship(mmsi: int, photos_dir: Path) -> Optional[dict]:
@@ -225,7 +223,7 @@ def _enrich_ship(mmsi: int, photos_dir: Path) -> Optional[dict]:
             if result:
                 return result
         except Exception:
-            logger.debug("Scraper %s failed for MMSI %d",
+            logger.debug("Scraper {} failed for MMSI {}",
                          getattr(scraper, "__name__", repr(scraper)), mmsi)
     return None
 
@@ -257,7 +255,7 @@ def main() -> None:
                 try:
                     _process_one_ship(conn, mmsi, photos_dir)
                 except Exception:
-                    logger.exception("Error enriching MMSI %d", mmsi)
+                    logger.exception("Error enriching MMSI {}", mmsi)
 
                 time.sleep(delay)
 
