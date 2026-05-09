@@ -15,8 +15,9 @@ Responsibilities:
 
 Scrape source priority order:
 1. ShipXplorer: https://www.shipxplorer.com/vessel/<mmsi>
-2. MarineTraffic (may block): https://www.marinetraffic.com/en/ais/details/ships/mmsi:<mmsi>
-3. ITU MMSI lookup (form POST): https://www.itu.int/mmsapp/ShipSearch.do
+2. MyShipTracking: https://www.myshiptracking.com/vessels/<mmsi>
+3. MarineTraffic (may block): https://www.marinetraffic.com/en/ais/details/ships/mmsi:<mmsi>
+4. ITU MMSI lookup (form POST): https://www.itu.int/mmsapp/ShipSearch.do
 
 HTTP client: requests + BeautifulSoup (html.parser)
 
@@ -149,6 +150,65 @@ def _scrape_marinetraffic(mmsi: int) -> Optional[dict]:
     return data if len(data) > 1 else None
 
 
+def _scrape_myshiptracking(mmsi: int) -> Optional[dict]:
+    """Attempt to scrape vessel data from MyShipTracking.
+
+    Returns a dict with any of: vessel_name, imo, call_sign, flag,
+    ship_type_label, length_m, build_year, source.
+    Returns None on any failure.
+    """
+    url = f"https://www.myshiptracking.com/vessels/{mmsi}"
+    resp = requests.get(url, timeout=_TIMEOUT, headers=_HEADERS)
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    data: dict = {"source": "myshiptracking"}
+
+    h1 = soup.find("h1")
+    if h1:
+        data["vessel_name"] = h1.get_text(strip=True)
+
+    # Ship type is rendered as an <h2> beneath the vessel name
+    h2 = soup.find("h2")
+    if h2:
+        ship_type = h2.get_text(strip=True)
+        if ship_type:
+            data["ship_type_label"] = ship_type
+
+    # "Info" section is a key-value table
+    for row in soup.find_all("tr"):
+        cells = row.find_all("td")
+        if len(cells) < 2:
+            continue
+        key = cells[0].get_text(strip=True).lower()
+        val = cells[1].get_text(strip=True)
+        if not val or val == "---":
+            continue
+        if "flag" in key:
+            # Value may be rendered as "Flag Marshall Is" — strip the prefix
+            data["flag"] = val.removeprefix("Flag ").strip()
+        elif key == "imo":
+            data["imo"] = val
+        elif "call" in key:
+            data["call_sign"] = val
+        elif key == "type":
+            if val:
+                data["ship_type_label"] = val
+        elif key == "size":
+            # "192 x 30 m" → take first number as length
+            try:
+                data["length_m"] = float(val.split()[0])
+            except (ValueError, IndexError):
+                pass
+        elif key == "build":
+            try:
+                data["build_year"] = int(val[:4])
+            except ValueError:
+                pass
+
+    return data if len(data) > 1 else None
+
+
 def _scrape_itu(mmsi: int) -> Optional[dict]:
     """Attempt MMSI lookup via ITU MMSI database (form POST).
 
@@ -217,7 +277,7 @@ def _process_one_ship(conn, mmsi: int, photos_dir: Path) -> None:
 
 def _enrich_ship(mmsi: int, photos_dir: Path) -> Optional[dict]:
     """Try each scrape source in priority order. Return first successful result, or None."""
-    for scraper in (_scrape_shipxplorer, _scrape_marinetraffic, _scrape_itu):
+    for scraper in (_scrape_shipxplorer, _scrape_myshiptracking, _scrape_marinetraffic, _scrape_itu):
         try:
             result = scraper(mmsi)
             if result:

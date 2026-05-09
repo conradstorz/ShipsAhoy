@@ -1,12 +1,12 @@
 [Unit]
 Description=ShipsAhoy RTL-AIS SDR receiver
-After=network.target
+After=network.target ships-ahoy-ais.service
 StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 User=__USER__
-ExecStart=__RTLAIS_BIN__ -n -T -p 0 -d 0
+ExecStart=__RTLAIS_BIN__ -n -p 0 -d 0
 Restart=always
 RestartSec=5
 StandardOutput=journal
