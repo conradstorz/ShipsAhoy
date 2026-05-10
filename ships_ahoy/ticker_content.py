@@ -13,12 +13,9 @@ Usage::
         driver.scroll_text(text, speed_px_per_sec=cfg.scroll_speed)
 """
 
-import random
 import sqlite3
 from typing import Optional
 
-from ships_ahoy.config import Config
-from ships_ahoy.db import get_active_quips, get_enrichment, get_ships_in_range
 from ships_ahoy.distance import bearing_to_cardinal, distance_info
 
 _STATUS_LABELS: dict[int, str] = {
