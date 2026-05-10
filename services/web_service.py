@@ -28,7 +28,7 @@ import os
 import subprocess
 import time
 
-from flask import Flask, Response, render_template, request, redirect, url_for
+from flask import Flask, Response, render_template, request, redirect, url_for, stream_with_context
 
 from ships_ahoy.config import Config
 from ships_ahoy.db import (
@@ -39,12 +39,12 @@ from ships_ahoy.db import (
     get_ships_in_range,
     get_recent_events,
     get_visit_history,
-    get_display_state,
     get_all_quips,
     add_quip,
     toggle_quip,
     delete_quip,
 )
+from ships_ahoy.ticker_content import build_playlist
 import geonamescache as _gnc
 from loguru import logger
 from ships_ahoy.distance import distance_info, haversine_km
@@ -418,69 +418,54 @@ def events():
 def ticker_preview():
     """Server-Sent Events stream of rendered ticker frames at ~30 FPS.
 
-    Each SSE client opens its own SQLite connection and PreviewDriver instance.
-    The generator polls display_state every ~250 ms for content updates,
-    and ticks the PreviewDriver at ~30 FPS.
+    Each SSE client opens its own SQLite connection and Config instance.
+    Uses build_playlist() directly — the same content the ticker service displays —
+    so the preview is always accurate regardless of display_state timing.
     """
-    max_frames = request.args.get("_max_frames", type=int)  # test hook
+    max_frames = request.args.get("_max_frames", type=int)
 
     def generate():
-        import sqlite3
-        conn = sqlite3.connect(_db_path)
-        conn.row_factory = sqlite3.Row
+        import sqlite3 as _sqlite3
+        import json as _json
+
+        conn = _sqlite3.connect(_db_path)
+        conn.row_factory = _sqlite3.Row
+        cfg = Config(conn)
         preview = PreviewDriver(
             display_width=ESP32_DISPLAY_WIDTH,
             display_height=ESP32_DISPLAY_HEIGHT,
         )
-        last_updated_at = None
-        last_frame_time = time.monotonic()
-        frames_sent = 0
-        poll_counter = 0
+
+        FRAME_INTERVAL = 1.0 / 30.0
+        GLYPH_WIDTH_PX = 6
+        frame_count = 0
 
         try:
             while True:
-                # Poll display_state every ~250 ms (every 8 frames at 30 FPS)
-                poll_counter += 1
-                if poll_counter >= 8:
-                    poll_counter = 0
-                    row = get_display_state(conn)
-                    if row and row["updated_at"] != last_updated_at:
-                        last_updated_at = row["updated_at"]
-                        if row["mode"] == "scroll":
-                            preview.scroll_text(row["text"] or "", speed_px_per_sec=row["speed"] or 40.0)
-                        else:
-                            preview.show_static(
-                                row["text"] or "",
-                                (row["duration_ms"] or 2000) / 1000.0,
-                            )
-
-                # Advance scroll and get frame
-                now = time.monotonic()
-                elapsed = now - last_frame_time
-                last_frame_time = now
-                frame = preview.get_current_frame(elapsed_sec=elapsed)
-
-                # Flatten row-major and emit
-                flat = [list(px) for pixel_row in frame for px in pixel_row]
-                data = json.dumps({
-                    "pixels": flat,
-                    "width": ESP32_DISPLAY_WIDTH,
-                    "height": ESP32_DISPLAY_HEIGHT,
-                })
-                yield f"data: {data}\n\n"
-
-                frames_sent += 1
-                if max_frames is not None and frames_sent >= max_frames:
-                    break
-
-                time.sleep(1 / 30)
+                playlist = build_playlist(conn, cfg)
+                for text in playlist:
+                    speed = cfg.scroll_speed
+                    preview.scroll_text(text, speed_px_per_sec=speed)
+                    text_px = max(ESP32_DISPLAY_WIDTH, len(text) * GLYPH_WIDTH_PX)
+                    duration_sec = text_px / max(speed, 1.0)
+                    elapsed = 0.0
+                    while elapsed < duration_sec:
+                        frame = preview.get_current_frame(elapsed_sec=FRAME_INTERVAL)
+                        flat = [list(px) for row in frame for px in row]
+                        yield (
+                            f"data: {_json.dumps({'pixels': flat, 'width': ESP32_DISPLAY_WIDTH, 'height': ESP32_DISPLAY_HEIGHT})}\n\n"
+                        )
+                        frame_count += 1
+                        if max_frames and frame_count >= max_frames:
+                            return
+                        time.sleep(FRAME_INTERVAL)
+                        elapsed += FRAME_INTERVAL
         finally:
             conn.close()
 
     return Response(
-        generate(),
+        stream_with_context(generate()),
         content_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

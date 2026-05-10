@@ -163,3 +163,28 @@ def test_add_quip_ignores_empty_text(client):
     c, conn = client
     c.post("/quips/add", data={"text": "   ", "category": "quip"})
     assert get_all_quips(conn) == []
+
+
+def test_ticker_preview_uses_build_playlist(client):
+    """SSE preview calls build_playlist; frames are emitted for each chunk."""
+    import json as _json
+    c, conn = client
+    # Insert a ship so build_playlist returns ship chunks
+    from ships_ahoy.ship_tracker import ShipInfo
+    from datetime import datetime
+    upsert_ship(conn, ShipInfo(
+        mmsi=987654321, name="MV Preview",
+        latitude=51.5, longitude=0.1,
+        last_seen=datetime.now(),
+    ))
+    conn.execute("UPDATE settings SET value='51.5' WHERE key='home_lat'")
+    conn.execute("UPDATE settings SET value='0.1' WHERE key='home_lon'")
+    conn.execute("UPDATE settings SET value='100' WHERE key='distance_km'")
+    conn.commit()
+
+    resp = c.get("/ticker/preview", query_string={"_max_frames": "2"})
+    body = resp.data.decode()
+    data_lines = [l for l in body.splitlines() if l.startswith("data:")]
+    assert len(data_lines) == 2
+    payload = _json.loads(data_lines[0][5:].strip())
+    assert "pixels" in payload
