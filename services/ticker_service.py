@@ -66,19 +66,20 @@ def main() -> None:
 
     logger.info("Ticker service starting.")
 
-    while True:
-        try:
-            playlist = build_playlist(conn, cfg)
-            for text in playlist:
-                logger.info("Ticker: {}", text)
-                driver.scroll_text(text, speed_px_per_sec=cfg.scroll_speed)
-        except KeyboardInterrupt:
-            logger.info("Ticker service stopped by user.")
-            driver.clear()
-            sys.exit(0)
-        except Exception:
-            logger.exception("Ticker service loop error")
-            time.sleep(1)
+    try:
+        while True:
+            try:
+                playlist = build_playlist(conn, cfg)
+                for text in playlist:
+                    logger.info("Ticker: {}", text)
+                    driver.scroll_text(text, speed_px_per_sec=cfg.scroll_speed)
+            except Exception:
+                logger.exception("Ticker service loop error")
+                time.sleep(1)
+    except KeyboardInterrupt:
+        logger.info("Ticker service stopped by user.")
+        driver.clear()
+        sys.exit(0)
 
 
 if __name__ == "__main__":
