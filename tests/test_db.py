@@ -28,6 +28,11 @@ from ships_ahoy.db import (
     mark_ship_departed,
     write_display_state,
     get_display_state,
+    add_quip,
+    get_all_quips,
+    get_active_quips,
+    toggle_quip,
+    delete_quip,
 )
 from ships_ahoy.events import EventType
 from ships_ahoy.ship_tracker import ShipInfo
@@ -622,3 +627,42 @@ def test_indexes_exist(conn):
     ]
     for idx in expected:
         assert idx in names, f"Missing index: {idx}"
+
+
+# --- quips table ---
+
+def test_add_quip_returns_int_id(conn):
+    qid = add_quip(conn, "Why don't sailors play cards?", "quip")
+    assert isinstance(qid, int) and qid > 0
+
+
+def test_get_all_quips_returns_all_rows(conn):
+    add_quip(conn, "A quip", "quip")
+    add_quip(conn, "A location fact", "location")
+    rows = get_all_quips(conn)
+    assert len(rows) == 2
+
+
+def test_get_active_quips_excludes_inactive(conn):
+    qid = add_quip(conn, "Inactive quip", "quip")
+    add_quip(conn, "Active quip", "quip")
+    toggle_quip(conn, qid)
+    rows = get_active_quips(conn)
+    assert len(rows) == 1
+    assert rows[0]["text"] == "Active quip"
+
+
+def test_toggle_quip_deactivates_then_reactivates(conn):
+    qid = add_quip(conn, "Toggleable", "quip")
+    toggle_quip(conn, qid)
+    row = conn.execute("SELECT active FROM quips WHERE id=?", (qid,)).fetchone()
+    assert row["active"] == 0
+    toggle_quip(conn, qid)
+    row = conn.execute("SELECT active FROM quips WHERE id=?", (qid,)).fetchone()
+    assert row["active"] == 1
+
+
+def test_delete_quip_removes_row(conn):
+    qid = add_quip(conn, "To be deleted", "quip")
+    delete_quip(conn, qid)
+    assert get_all_quips(conn) == []

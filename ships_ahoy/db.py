@@ -100,6 +100,16 @@ CREATE TABLE IF NOT EXISTS display_state (
 )
 """
 
+_CREATE_QUIPS = """
+CREATE TABLE IF NOT EXISTS quips (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    text       TEXT NOT NULL,
+    category   TEXT NOT NULL CHECK(category IN ('quip', 'location')),
+    active     INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)
+"""
+
 _DEFAULT_SETTINGS = [
     ("home_lat", None),
     ("home_lon", None),
@@ -146,6 +156,7 @@ def init_db(path: str, check_same_thread: bool = True) -> sqlite3.Connection:
     conn.execute(_CREATE_SETTINGS)
     conn.execute(_CREATE_SHIP_VISITS)
     conn.execute(_CREATE_DISPLAY_STATE)
+    conn.execute(_CREATE_QUIPS)
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_ships_last_seen ON ships (last_seen)"
     )
@@ -453,3 +464,40 @@ def write_display_state(
 def get_display_state(conn: sqlite3.Connection) -> Optional[sqlite3.Row]:
     """Return the single display_state row, or None if not yet written."""
     return conn.execute("SELECT * FROM display_state").fetchone()
+
+
+def get_all_quips(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Return all quips ordered by created_at descending."""
+    return conn.execute(
+        "SELECT * FROM quips ORDER BY created_at DESC"
+    ).fetchall()
+
+
+def get_active_quips(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Return only active quips ordered by created_at descending."""
+    return conn.execute(
+        "SELECT * FROM quips WHERE active = 1 ORDER BY created_at DESC"
+    ).fetchall()
+
+
+def add_quip(conn: sqlite3.Connection, text: str, category: str) -> int:
+    """Insert a new quip and return its id."""
+    cur = conn.execute(
+        "INSERT INTO quips (text, category) VALUES (?, ?)", (text, category)
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def toggle_quip(conn: sqlite3.Connection, quip_id: int) -> None:
+    """Flip the active flag for the given quip."""
+    conn.execute(
+        "UPDATE quips SET active = NOT active WHERE id = ?", (quip_id,)
+    )
+    conn.commit()
+
+
+def delete_quip(conn: sqlite3.Connection, quip_id: int) -> None:
+    """Delete the quip with the given id."""
+    conn.execute("DELETE FROM quips WHERE id = ?", (quip_id,))
+    conn.commit()
