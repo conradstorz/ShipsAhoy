@@ -158,3 +158,72 @@ def test_operator_chunk_when_enriched_with_owner(conn):
     ).fetchone()
     chunks = build_ship_chunks(ship, enrich)
     assert any("Maersk Line" in c for c in chunks)
+
+
+from ships_ahoy.ticker_content import build_idle_chunks, build_playlist
+from ships_ahoy.config import Config
+
+
+def test_idle_chunks_starts_with_no_ships_message(conn):
+    chunks = build_idle_chunks(conn)
+    assert chunks[0] == "No ships in range"
+
+
+def test_idle_chunks_includes_active_quips(conn):
+    add_quip(conn, "A river runs through it", "location")
+    add_quip(conn, "Why did the sailor fail math? Too many C's!", "quip")
+    chunks = build_idle_chunks(conn)
+    assert "A river runs through it" in chunks
+    assert "Why did the sailor fail math? Too many C's!" in chunks
+
+
+def test_idle_chunks_excludes_inactive_quips(conn):
+    from ships_ahoy.db import toggle_quip
+    qid = add_quip(conn, "Inactive quip", "quip")
+    toggle_quip(conn, qid)
+    chunks = build_idle_chunks(conn)
+    assert "Inactive quip" not in chunks
+
+
+def test_idle_chunks_shuffles_on_each_call(conn):
+    for i in range(20):
+        add_quip(conn, f"Quip {i}", "quip")
+    first = build_idle_chunks(conn)
+    second = build_idle_chunks(conn)
+    # With 20 quips the probability of identical order is astronomically small
+    assert first != second or len(first) <= 2
+
+
+def test_build_playlist_returns_ship_chunks_when_ships_in_range(conn):
+    _make_ship(conn, mmsi=200000001, latitude=51.5, longitude=0.1)
+    cfg = Config(conn)
+    playlist = build_playlist(conn, cfg)
+    assert len(playlist) > 0
+    assert any("MV Test" in c for c in playlist)
+
+
+def test_build_playlist_returns_idle_when_no_ships(conn):
+    # conn has home configured but no ships
+    cfg = Config(conn)
+    playlist = build_playlist(conn, cfg)
+    assert playlist[0] == "No ships in range"
+
+
+def test_build_playlist_orders_closest_first(conn):
+    _make_ship(conn, mmsi=200000002, name="MV Far",   latitude=51.9, longitude=0.1)
+    _make_ship(conn, mmsi=200000003, name="MV Close", latitude=51.51, longitude=0.1)
+    cfg = Config(conn)
+    playlist = build_playlist(conn, cfg)
+    close_idx = next(i for i, c in enumerate(playlist) if "MV Close" in c)
+    far_idx   = next(i for i, c in enumerate(playlist) if "MV Far" in c)
+    assert close_idx < far_idx
+
+
+def test_build_playlist_returns_idle_when_home_not_set(conn):
+    conn.execute("UPDATE settings SET value=NULL WHERE key='home_lat'")
+    conn.execute("UPDATE settings SET value=NULL WHERE key='home_lon'")
+    conn.commit()
+    _make_ship(conn, mmsi=200000004)
+    cfg = Config(conn)
+    playlist = build_playlist(conn, cfg)
+    assert playlist[0] == "No ships in range"

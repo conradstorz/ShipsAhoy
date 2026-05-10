@@ -13,9 +13,12 @@ Usage::
         driver.scroll_text(text, speed_px_per_sec=cfg.scroll_speed)
 """
 
+import random
 import sqlite3
 from typing import Optional
 
+from ships_ahoy.config import Config
+from ships_ahoy.db import get_active_quips, get_enrichment, get_ships_in_range
 from ships_ahoy.distance import bearing_to_cardinal, distance_info
 
 _STATUS_LABELS: dict[int, str] = {
@@ -135,3 +138,49 @@ def build_ship_chunks(
         chunks.append(f"{name} is operated by {enrichment_row['owner']}")
 
     return chunks
+
+
+def get_in_range_ships_with_distance(
+    conn: sqlite3.Connection,
+    cfg: Config,
+) -> list[tuple[sqlite3.Row, Optional[sqlite3.Row], float, str]]:
+    """Return (ship_row, enrichment_row, distance_km, bearing_word) sorted closest-first.
+
+    Returns an empty list if home location is not configured.
+    """
+    home = cfg.home_location
+    if home is None:
+        return []
+    home_lat, home_lon = home
+    ships = get_ships_in_range(conn, home_lat, home_lon, cfg.distance_km)
+    result: list[tuple[sqlite3.Row, Optional[sqlite3.Row], float, str]] = []
+    for ship in ships:
+        km, cardinal = distance_info(home_lat, home_lon, ship["latitude"], ship["longitude"])
+        bearing_word = _CARDINAL_WORDS.get(cardinal, cardinal)
+        enrichment = get_enrichment(conn, ship["mmsi"])
+        result.append((ship, enrichment, km, bearing_word))
+    result.sort(key=lambda x: x[2])
+    return result
+
+
+def build_idle_chunks(conn: sqlite3.Connection) -> list[str]:
+    """Return 'No ships in range' followed by shuffled active quips and location facts."""
+    rows = get_active_quips(conn)
+    texts = [r["text"] for r in rows]
+    random.shuffle(texts)
+    return ["No ships in range"] + texts
+
+
+def build_playlist(conn: sqlite3.Connection, cfg: Config) -> list[str]:
+    """Return the full scroll playlist for one cycle.
+
+    If ships are in range: prose chunks for each ship, closest-first.
+    If no ships (or home not configured): idle chunks.
+    """
+    ships_data = get_in_range_ships_with_distance(conn, cfg)
+    if not ships_data:
+        return build_idle_chunks(conn)
+    playlist: list[str] = []
+    for ship_row, enrichment_row, distance_km, bearing_label in ships_data:
+        playlist.extend(build_ship_chunks(ship_row, enrichment_row, distance_km, bearing_label))
+    return playlist
