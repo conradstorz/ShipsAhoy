@@ -170,7 +170,6 @@ def test_ticker_preview_uses_build_playlist(client):
     import json as _json
     c, conn = client
     # Insert a ship so build_playlist returns ship chunks
-    from ships_ahoy.ship_tracker import ShipInfo
     from datetime import datetime
     upsert_ship(conn, ShipInfo(
         mmsi=987654321, name="MV Preview",

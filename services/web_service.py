@@ -442,7 +442,12 @@ def ticker_preview():
 
         try:
             while True:
-                playlist = build_playlist(conn, cfg)
+                try:
+                    playlist = build_playlist(conn, cfg)
+                except Exception:
+                    logger.exception("ticker_preview: build_playlist error")
+                    time.sleep(1.0)
+                    continue
                 for text in playlist:
                     speed = cfg.scroll_speed
                     preview.scroll_text(text, speed_px_per_sec=speed)
@@ -456,7 +461,7 @@ def ticker_preview():
                             f"data: {_json.dumps({'pixels': flat, 'width': ESP32_DISPLAY_WIDTH, 'height': ESP32_DISPLAY_HEIGHT})}\n\n"
                         )
                         frame_count += 1
-                        if max_frames and frame_count >= max_frames:
+                        if max_frames is not None and frame_count >= max_frames:
                             return
                         time.sleep(FRAME_INTERVAL)
                         elapsed += FRAME_INTERVAL
@@ -466,6 +471,7 @@ def ticker_preview():
     return Response(
         stream_with_context(generate()),
         content_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
