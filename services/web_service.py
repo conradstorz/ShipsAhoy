@@ -10,6 +10,10 @@ Routes:
     GET  /settings      Settings form pre-populated from Config
     POST /settings      Save updated settings, redirect to GET /settings
     GET  /static/photos/<filename>  Cached ship photos (served by Flask)
+    GET  /quips         Quip list with add form
+    POST /quips/add     Add new quip (ignores empty/whitespace)
+    POST /quips/<id>/toggle  Toggle active/inactive
+    POST /quips/<id>/delete  Delete quip
 
 Flag display rule: show enrichment.flag when non-null, otherwise ships.flag.
 

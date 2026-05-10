@@ -1,6 +1,10 @@
 import sys
 import pytest
 from unittest import mock
+from datetime import datetime
+
+from ships_ahoy.db import upsert_ship, add_quip, get_all_quips, toggle_quip
+from ships_ahoy.ship_tracker import ShipInfo
 
 @pytest.fixture
 def client(tmp_path):
@@ -48,11 +52,6 @@ def test_ticker_preview_returns_data_line(client):
             assert "height" in payload
             return
     pytest.fail("No data: line found in SSE stream")
-
-
-from datetime import datetime
-from ships_ahoy.db import upsert_ship
-from ships_ahoy.ship_tracker import ShipInfo
 
 
 def _make_ship(mmsi=123456789, name="MV Web Test"):
@@ -116,9 +115,6 @@ def test_settings_post_ignores_invalid_float(client):
     assert resp.status_code == 302  # no crash
 
     assert Config(conn).distance_km == original
-
-
-from ships_ahoy.db import add_quip, get_all_quips, toggle_quip
 
 
 def test_quips_page_returns_200(client):
