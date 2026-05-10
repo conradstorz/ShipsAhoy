@@ -1,7 +1,8 @@
 """Tests for ships_ahoy.ticker_content."""
 import pytest
+from ships_ahoy.config import Config
 from ships_ahoy.db import init_db, add_quip
-from ships_ahoy.ticker_content import build_ship_chunks
+from ships_ahoy.ticker_content import build_idle_chunks, build_playlist, build_ship_chunks
 
 
 @pytest.fixture
@@ -159,9 +160,6 @@ def test_operator_chunk_when_enriched_with_owner(conn):
     chunks = build_ship_chunks(ship, enrich)
     assert any("Maersk Line" in c for c in chunks)
 
-
-from ships_ahoy.ticker_content import build_idle_chunks, build_playlist
-from ships_ahoy.config import Config
 
 
 def test_idle_chunks_starts_with_no_ships_message(conn):
