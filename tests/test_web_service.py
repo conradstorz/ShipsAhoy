@@ -116,3 +116,54 @@ def test_settings_post_ignores_invalid_float(client):
     assert resp.status_code == 302  # no crash
 
     assert Config(conn).distance_km == original
+
+
+from ships_ahoy.db import add_quip, get_all_quips, toggle_quip
+
+
+def test_quips_page_returns_200(client):
+    c, conn = client
+    resp = c.get("/quips")
+    assert resp.status_code == 200
+
+
+def test_quips_page_shows_table(client):
+    c, conn = client
+    add_quip(conn, "A funny joke", "quip")
+    resp = c.get("/quips")
+    assert b"A funny joke" in resp.data
+
+
+def test_add_quip_via_post_redirects(client):
+    c, conn = client
+    resp = c.post("/quips/add", data={"text": "Hello river!", "category": "location"})
+    assert resp.status_code == 302
+
+
+def test_add_quip_via_post_persists_to_db(client):
+    c, conn = client
+    c.post("/quips/add", data={"text": "Hello river!", "category": "location"})
+    rows = get_all_quips(conn)
+    assert any(r["text"] == "Hello river!" for r in rows)
+
+
+def test_toggle_quip_via_post_deactivates(client):
+    c, conn = client
+    qid = add_quip(conn, "Toggle me", "quip")
+    c.post(f"/quips/{qid}/toggle")
+    row = conn.execute("SELECT active FROM quips WHERE id=?", (qid,)).fetchone()
+    assert row["active"] == 0
+
+
+def test_delete_quip_via_post_removes_row(client):
+    c, conn = client
+    qid = add_quip(conn, "Delete me", "quip")
+    c.post(f"/quips/{qid}/delete")
+    rows = get_all_quips(conn)
+    assert not any(r["id"] == qid for r in rows)
+
+
+def test_add_quip_ignores_empty_text(client):
+    c, conn = client
+    c.post("/quips/add", data={"text": "   ", "category": "quip"})
+    assert get_all_quips(conn) == []

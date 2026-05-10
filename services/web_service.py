@@ -36,6 +36,10 @@ from ships_ahoy.db import (
     get_recent_events,
     get_visit_history,
     get_display_state,
+    get_all_quips,
+    add_quip,
+    toggle_quip,
+    delete_quip,
 )
 import geonamescache as _gnc
 from loguru import logger
@@ -550,6 +554,33 @@ def settings_post():
                 logger.warning("Settings: invalid int for {}: {!r} — ignored", key, value)
 
     return redirect(url_for("settings_get"))
+
+
+@app.route("/quips")
+def quips_page():
+    quips = get_all_quips(_conn)
+    return render_template("quips.html", quips=quips)
+
+
+@app.route("/quips/add", methods=["POST"])
+def add_quip_route():
+    text = request.form.get("text", "").strip()
+    category = request.form.get("category", "quip")
+    if text and category in ("quip", "location"):
+        add_quip(_conn, text, category)
+    return redirect(url_for("quips_page"))
+
+
+@app.route("/quips/<int:quip_id>/toggle", methods=["POST"])
+def toggle_quip_route(quip_id: int):
+    toggle_quip(_conn, quip_id)
+    return redirect(url_for("quips_page"))
+
+
+@app.route("/quips/<int:quip_id>/delete", methods=["POST"])
+def delete_quip_route(quip_id: int):
+    delete_quip(_conn, quip_id)
+    return redirect(url_for("quips_page"))
 
 
 def _build_parser() -> argparse.ArgumentParser:

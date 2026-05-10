@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ShipsAhoy — Ticker Quips</title>
+  <style>
+    body { font-family: monospace; max-width: 700px; margin: 2em auto; }
+    h1 { margin-bottom: 0.5em; }
+    .add-form { display: flex; gap: 0.5em; margin-bottom: 1.5em; flex-wrap: wrap; }
+    .add-form input[type=text] { flex: 1; padding: 0.4em; font-family: monospace; min-width: 200px; }
+    .add-form select, .add-form button { padding: 0.4em 0.8em; font-family: monospace; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 0.4em 0.6em; border-bottom: 1px solid #ccc; }
+    th { background: #f0f0f0; }
+    .inactive { color: #999; }
+    .actions form { display: inline; }
+    .actions button { padding: 0.2em 0.6em; font-family: monospace; cursor: pointer; }
+    a { color: inherit; }
+  </style>
+</head>
+<body>
+  <a href="/">← Back</a>
+  <h1>Ticker Quips</h1>
+
+  <form class="add-form" method="POST" action="/quips/add">
+    <input type="text" name="text" placeholder="Enter quip or location fact" required>
+    <select name="category">
+      <option value="quip">Quip / Joke</option>
+      <option value="location">Location Fact</option>
+    </select>
+    <button type="submit">Add</button>
+  </form>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Text</th>
+        <th>Category</th>
+        <th>Active</th>
+        <th class="actions">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for q in quips %}
+      <tr class="{{ '' if q['active'] else 'inactive' }}">
+        <td>{{ q['text'] }}</td>
+        <td>{{ q['category'] }}</td>
+        <td>{{ 'Yes' if q['active'] else 'No' }}</td>
+        <td class="actions">
+          <form method="POST" action="/quips/{{ q['id'] }}/toggle">
+            <button type="submit">{{ 'Deactivate' if q['active'] else 'Activate' }}</button>
+          </form>
+          <form method="POST" action="/quips/{{ q['id'] }}/delete"
+                onsubmit="return confirm('Delete this quip?')">
+            <button type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4">No quips yet. Add one above.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>
