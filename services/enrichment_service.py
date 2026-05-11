@@ -27,6 +27,7 @@ Usage::
 """
 
 import argparse
+import os
 import sqlite3
 import sys
 import time
@@ -62,6 +63,34 @@ def _build_parser() -> argparse.ArgumentParser:
              "then run the service normally.",
     )
     return parser
+
+
+_SERVICE_SCRIPTS = {
+    "ais_service.py",
+    "enrichment_service.py",
+    "ticker_service.py",
+    "web_service.py",
+}
+
+
+def _find_competing_services() -> list[str]:
+    """Return a list of ShipsAhoy service command-lines running in other processes."""
+    my_pid = os.getpid()
+    competing = []
+    try:
+        for entry in Path("/proc").iterdir():
+            if not entry.name.isdigit() or int(entry.name) == my_pid:
+                continue
+            cmdline_file = entry / "cmdline"
+            try:
+                cmdline = cmdline_file.read_text().replace("\0", " ").strip()
+            except OSError:
+                continue
+            if any(svc in cmdline for svc in _SERVICE_SCRIPTS):
+                competing.append(cmdline)
+    except OSError:
+        pass
+    return competing
 
 
 def _check_db_writable(conn) -> bool:
@@ -351,6 +380,22 @@ def main() -> None:
 
     photos_dir = Path(args.photos_dir)
     photos_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.reset_enrichment:
+        competing = _find_competing_services()
+        if competing:
+            logger.error(
+                "--reset-enrichment requires exclusive database access, but {} "
+                "ShipsAhoy service(s) are still running:",
+                len(competing),
+            )
+            for cmd in competing:
+                logger.error("  {}", cmd)
+            logger.error(
+                "Run: sudo systemctl stop ships-ahoy.target  "
+                "(then kill any remaining processes)"
+            )
+            sys.exit(1)
 
     conn = init_db(args.db)
 
