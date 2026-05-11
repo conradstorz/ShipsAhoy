@@ -20,6 +20,7 @@ from typing import Optional
 from ships_ahoy.config import Config
 from ships_ahoy.db import get_active_quips, get_enrichment, get_ships_in_range
 from ships_ahoy.distance import bearing_to_cardinal, distance_info
+from ships_ahoy.message_builder import format_ship_display
 
 _STATUS_LABELS: dict[int, str] = {
     0: "underway",
@@ -69,75 +70,72 @@ def _cardinal_word(degrees: float) -> str:
     return _CARDINAL_WORDS.get(abbr, abbr)
 
 
-def build_ship_chunks(
+def _extract_facts(
     ship_row: sqlite3.Row,
     enrichment_row: Optional[sqlite3.Row],
     distance_km: Optional[float] = None,
     bearing_label: Optional[str] = None,
-) -> list[str]:
-    """Return ordered prose chunks for one ship.
-
-    Each chunk is a complete sentence containing the ship's name.
-    Chunks for unavailable fields are omitted — no 'unknown' placeholders.
-    """
+) -> dict:
+    """Convert DB rows into a plain facts dict for format_ship_display."""
     name: str = (
         enrichment_row["vessel_name"]
         if enrichment_row and enrichment_row["vessel_name"]
         else ship_row["name"]
     ) or "Unknown vessel"
 
-    chunks: list[str] = []
-
-    # 1. Identity
     flag = ship_row["flag"] or (enrichment_row["flag"] if enrichment_row else None)
-    type_label = _type_label(ship_row["ship_type"])
-    if flag:
-        chunks.append(f"{name} is a {type_label} flying the {flag} flag")
-    else:
-        chunks.append(f"{name} is a {type_label}")
 
-    # 2. Motion
-    speed = ship_row["speed"]
     heading = ship_row["heading"]
-    if speed is not None and heading is not None:
-        direction = _cardinal_word(heading)
-        chunks.append(f"{name} is traveling at {speed:.1f} knots heading {direction}")
+    heading_word = _cardinal_word(heading) if heading is not None else None
 
-    # 3. Position
-    if distance_km is not None and bearing_label is not None:
-        chunks.append(f"{name} is {distance_km:.1f} km away, to the {bearing_label}")
-
-    # 4. Navigation status (only noteworthy ones)
     status = ship_row["status"]
-    if status is not None and status in _NOTEWORTHY_STATUSES:
-        chunks.append(f"{name} is currently {_STATUS_LABELS[status]}")
+    status_label = (
+        _STATUS_LABELS[status]
+        if status is not None and status in _NOTEWORTHY_STATUSES
+        else None
+    )
 
-    # 5. Destination
     dest = ship_row["destination"]
-    if dest and dest.strip() and dest.strip() != "0":
-        chunks.append(f"{name} is bound for {dest.strip().title()}")
+    destination = (
+        dest.strip().title()
+        if dest and dest.strip() and dest.strip() != "0"
+        else None
+    )
 
-    # 6. Visit history
-    visits = ship_row["visit_count"] or 1
-    if visits == 1:
-        chunks.append(f"This is {name}'s first visit to this area")
-    else:
-        chunks.append(f"{name} has visited this area {visits} times")
+    length = enrichment_row["length_m"] if enrichment_row else None
+    build_year = enrichment_row["build_year"] if enrichment_row else None
+    owner = enrichment_row["owner"] if enrichment_row else None
 
-    # 7. Size and build year (requires enrichment)
-    if enrichment_row:
-        length = enrichment_row["length_m"]
-        year = enrichment_row["build_year"]
-        if length and year:
-            chunks.append(f"{name} is {int(length)} meters long, built in {year}")
-        elif length:
-            chunks.append(f"{name} is {int(length)} meters long")
+    return {
+        "name": name,
+        "type_label": _type_label(ship_row["ship_type"]),
+        "flag": flag,
+        "speed_knots": ship_row["speed"],
+        "heading_word": heading_word,
+        "distance_km": distance_km,
+        "bearing_word": bearing_label,
+        "status_label": status_label,
+        "destination": destination,
+        "visit_count": ship_row["visit_count"] or 1,
+        "length_m": length,
+        "build_year": build_year,
+        "owner": owner,
+    }
 
-    # 8. Operator (requires enrichment)
-    if enrichment_row and enrichment_row["owner"]:
-        chunks.append(f"{name} is operated by {enrichment_row['owner']}")
 
-    return chunks
+def build_ship_chunks(
+    ship_row: sqlite3.Row,
+    enrichment_row: Optional[sqlite3.Row],
+    distance_km: Optional[float] = None,
+    bearing_label: Optional[str] = None,
+) -> list[str]:
+    """Return ordered prose chunks for one ship (verbose mode).
+
+    Each chunk is a complete sentence containing the ship's name.
+    Chunks for unavailable fields are omitted — no 'unknown' placeholders.
+    """
+    facts = _extract_facts(ship_row, enrichment_row, distance_km, bearing_label)
+    return format_ship_display(facts, mode="verbose")
 
 
 def get_in_range_ships_with_distance(
@@ -180,11 +178,9 @@ def build_playlist(conn: sqlite3.Connection, cfg: Config) -> list[str]:
     ships_data = get_in_range_ships_with_distance(conn, cfg)
     if not ships_data:
         return build_idle_chunks(conn)
+    mode = "compact" if cfg.compact else "verbose"
     playlist: list[str] = []
     for ship_row, enrichment_row, distance_km, bearing_label in ships_data:
-        chunks = build_ship_chunks(ship_row, enrichment_row, distance_km, bearing_label)
-        if cfg.compact:
-            playlist.append(" — ".join(chunks))
-        else:
-            playlist.extend(chunks)
+        facts = _extract_facts(ship_row, enrichment_row, distance_km, bearing_label)
+        playlist.extend(format_ship_display(facts, mode=mode))
     return playlist
