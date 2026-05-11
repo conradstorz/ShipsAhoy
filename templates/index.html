@@ -196,9 +196,10 @@
       const INTERVAL = 30;
       const countdownEl = document.getElementById('refresh-countdown');
       let remaining = INTERVAL;
-      setInterval(function () {
+      const refreshTimer = setInterval(function () {
         remaining -= 1;
         if (remaining <= 0) {
+          clearInterval(refreshTimer);
           location.reload();
         } else {
           countdownEl.textContent = remaining;
