@@ -288,8 +288,9 @@ def _download_photo(photo_url: str, mmsi: int, photos_dir: Path) -> Optional[str
     return str(dest)
 
 
-def _process_one_ship(conn, mmsi: int, photos_dir: Path) -> None:
+def _process_one_ship(conn, mmsi: int, photos_dir: Path, attempt: int, max_attempts: int) -> None:
     """Enrich one ship: try scrapers, save result or increment fetch attempts."""
+    logger.info("Enriching MMSI {} (attempt {}/{})", mmsi, attempt, max_attempts)
     data = _enrich_ship(mmsi, photos_dir)
     if data:
         if data.get("photo_url"):
@@ -299,22 +300,28 @@ def _process_one_ship(conn, mmsi: int, photos_dir: Path) -> None:
         save_enrichment(conn, mmsi, data)
         write_event(conn, mmsi, EventType.ENRICHED,
                     f"New enrichment data for MMSI {mmsi}")
-        logger.info("Enriched MMSI {} from {}", mmsi, data.get("source"))
+        name = data.get("vessel_name") or "no name found"
+        logger.info("Enriched MMSI {} — '{}' (source: {})", mmsi, name, data.get("source"))
     else:
         increment_fetch_attempts(conn, mmsi)
-        logger.debug("No data found for MMSI {}", mmsi)
+        if attempt >= max_attempts:
+            logger.warning("MMSI {}: all {} scrape attempts exhausted, giving up", mmsi, max_attempts)
+        else:
+            logger.info("MMSI {}: no data found this attempt ({} remaining)", mmsi, max_attempts - attempt)
 
 
 def _enrich_ship(mmsi: int, photos_dir: Path) -> Optional[dict]:
     """Try each scrape source in priority order. Return first successful result, or None."""
     for scraper in (_scrape_shipxplorer, _scrape_myshiptracking, _scrape_marinetraffic, _scrape_itu):
+        name = getattr(scraper, "__name__", repr(scraper))
+        logger.debug("Trying {} for MMSI {}", name, mmsi)
         try:
             result = scraper(mmsi)
             if result:
                 return result
-        except Exception:
-            logger.debug("Scraper {} failed for MMSI {}",
-                         getattr(scraper, "__name__", repr(scraper)), mmsi)
+            logger.debug("{}: no usable data for MMSI {}", name, mmsi)
+        except Exception as exc:
+            logger.debug("{} failed for MMSI {}: {}", name, mmsi, exc)
     return None
 
 
@@ -341,16 +348,37 @@ def main() -> None:
             mmsi_list = get_unenriched_ships(conn, max_attempts)
 
             if not mmsi_list:
+                logger.debug("No ships to enrich; sleeping {}s", delay)
                 time.sleep(delay)
                 continue
 
+            logger.info("Enrichment batch starting: {} ships queued", len(mmsi_list))
+            enriched_count = 0
+            failed_count = 0
+
             for mmsi in mmsi_list:
+                row = conn.execute(
+                    "SELECT COALESCE(fetch_attempts, 0) FROM enrichment WHERE mmsi=?", (mmsi,)
+                ).fetchone()
+                attempt = (row[0] + 1) if row else 1
                 try:
-                    _process_one_ship(conn, mmsi, photos_dir)
+                    _process_one_ship(conn, mmsi, photos_dir, attempt, max_attempts)
+                    # Check if enrichment succeeded (enriched flag set)
+                    ship = conn.execute("SELECT enriched FROM ships WHERE mmsi=?", (mmsi,)).fetchone()
+                    if ship and ship["enriched"]:
+                        enriched_count += 1
+                    else:
+                        failed_count += 1
                 except Exception:
                     logger.exception("Error enriching MMSI {}", mmsi)
+                    failed_count += 1
 
                 time.sleep(delay)
+
+            logger.info(
+                "Enrichment batch complete: {} enriched, {} failed/deferred",
+                enriched_count, failed_count,
+            )
 
         except KeyboardInterrupt:
             logger.info("Enrichment service stopped by user.")

@@ -31,7 +31,7 @@ def test_process_one_ship_enriches_ship(conn, photos_dir):
 
     fake_data = {"vessel_name": "MV Test", "source": "shipxplorer", "flag": "NO"}
     with mock.patch.object(svc, "_enrich_ship", return_value=fake_data):
-        svc._process_one_ship(conn, 123456789, photos_dir)
+        svc._process_one_ship(conn, 123456789, photos_dir, attempt=1, max_attempts=3)
 
     enrichment = conn.execute(
         "SELECT * FROM enrichment WHERE mmsi=123456789"
@@ -59,7 +59,7 @@ def test_process_one_ship_increments_attempts_on_failure(conn, photos_dir):
     conn.commit()
 
     with mock.patch.object(svc, "_enrich_ship", return_value=None):
-        svc._process_one_ship(conn, 987654321, photos_dir)
+        svc._process_one_ship(conn, 987654321, photos_dir, attempt=1, max_attempts=3)
 
     row = conn.execute(
         "SELECT fetch_attempts FROM enrichment WHERE mmsi=987654321"
