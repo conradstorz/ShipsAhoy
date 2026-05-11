@@ -78,11 +78,12 @@ def _extract_facts(
     bearing_label: Optional[str] = None,
 ) -> dict:
     """Convert DB rows into a plain facts dict for format_ship_display."""
-    name: str = (
-        enrichment_row["vessel_name"]
-        if enrichment_row and enrichment_row["vessel_name"]
-        else ship_row["name"]
-    ) or "Unknown vessel"
+    enrich_name = enrichment_row["vessel_name"] if enrichment_row else None
+    ais_name = ship_row["name"]
+    # Discard junk AIS names: "Unknown" (pre-fix default) or bare MMSI digits
+    if ais_name and (ais_name.strip() == "Unknown" or ais_name.strip().isdigit()):
+        ais_name = None
+    name: str = enrich_name or ais_name or "Unknown vessel"
 
     flag = ship_row["flag"] or (enrichment_row["flag"] if enrichment_row else None)
 

@@ -1,0 +1,25 @@
+locode,canonical_name,aliases,state,country_code,waterway,river_mile,latitude,longitude,destination_type,status,source,source_updated,is_active,notes
+USMEM,Memphis,"MEMPHIS|MEMPHIS TN|MEM",TN,US,Mississippi River,734.0,35.1495,-90.0490,inland_river_port,seeded,manual_seed,2026-05-11,1,Major Lower Mississippi River destination
+USSTL,St. Louis,"ST LOUIS|SAINT LOUIS|STL",MO,US,Mississippi River,179.0,38.6270,-90.1994,inland_river_port,seeded,manual_seed,2026-05-11,1,Mississippi and Missouri river hub
+USPAH,Paducah,"PADUCAH|PADUCAH KY|PAH",KY,US,Ohio River,934.5,37.0834,-88.6000,riverport,seeded,manual_seed,2026-05-11,1,Near Ohio Tennessee confluence
+USLOU,Louisville,"LOUISVILLE|LOUISVILLE KY|LOU",KY,US,Ohio River,607.0,38.2527,-85.7585,riverport,seeded,manual_seed,2026-05-11,1,Ohio River destination
+USCIN,Cincinnati,"CINCINNATI|CINCINNATI OH|CIN",OH,US,Ohio River,470.0,39.1031,-84.5120,riverport,seeded,manual_seed,2026-05-11,1,Ohio River destination
+USPIT,Pittsburgh,"PITTSBURGH|PITTSBURGH PA|PIT",PA,US,Ohio River System,0.0,40.4406,-79.9959,inland_port,seeded,manual_seed,2026-05-11,1,Head of Ohio River system
+USHTS,Huntington Tri-State,"HUNTINGTON|HUNTINGTON WV|HTS|TRI STATE",WV,US,Ohio River,308.0,38.4192,-82.4452,inland_port,seeded,manual_seed,2026-05-11,1,Ohio River port area
+USNOL,New Orleans,"NEW ORLEANS|NOLA|N ORLEANS|NO LA|NEW ORLEANS LA",LA,US,Lower Mississippi River,95.0,29.9511,-90.0715,river_gulf_hybrid,seeded,manual_seed,2026-05-11,1,Lower Mississippi / Gulf gateway
+USBTR,Baton Rouge,"BATON ROUGE|BTR|BATON ROUGE LA",LA,US,Lower Mississippi River,228.0,30.4515,-91.1871,river_gulf_hybrid,seeded,manual_seed,2026-05-11,1,Lower Mississippi destination
+USVCK,Vicksburg,"VICKSBURG|VICKSBURG MS|VCK",MS,US,Mississippi River,437.0,32.3526,-90.8779,inland_river_port,seeded,manual_seed,2026-05-11,1,Lower Mississippi River destination
+USGRE,Greenville,"GREENVILLE MS|GREENVILLE",MS,US,Mississippi River,537.0,33.4087,-91.0618,inland_river_port,seeded,manual_seed,2026-05-11,1,Lower Mississippi River destination
+USHEL,Helena-West Helena,"HELENA|HELENA AR|HELENA WEST HELENA",AR,US,Mississippi River,663.0,34.5294,-90.5918,inland_river_port,seeded,manual_seed,2026-05-11,1,Lower Mississippi River destination
+USCHI,Chicago,"CHICAGO|CHICAGO IL|CHI",IL,US,Illinois Waterway,327.0,41.8781,-87.6298,great_lakes_inland_connector,seeded,manual_seed,2026-05-11,1,Illinois Waterway and Great Lakes connector
+USPEO,Peoria,"PEORIA|PEORIA IL|PEO",IL,US,Illinois River,162.0,40.6936,-89.5890,riverport,seeded,manual_seed,2026-05-11,1,Illinois River destination
+USLIT,Little Rock,"LITTLE ROCK|LITTLE ROCK AR|LIT",AR,US,Arkansas River,125.0,34.7465,-92.2896,inland_port,seeded,manual_seed,2026-05-11,1,McClellan-Kerr Arkansas River system
+USTUL,Tulsa Port of Catoosa,"TULSA|CATOOSA|PORT OF CATOOSA|TULSA PORT",OK,US,McClellan-Kerr Arkansas River System,445.0,36.1689,-95.7458,inland_port,seeded,manual_seed,2026-05-11,1,Head of navigation for MKARNS area
+USNSH,Nashville,"NASHVILLE|NASHVILLE TN|NSH",TN,US,Cumberland River,191.0,36.1627,-86.7816,riverport,seeded,manual_seed,2026-05-11,1,Cumberland River destination
+USCHA,Chattanooga,"CHATTANOOGA|CHATTANOOGA TN|CHA",TN,US,Tennessee River,464.0,35.0456,-85.3097,riverport,seeded,manual_seed,2026-05-11,1,Tennessee River destination
+USDEC,Decatur,"DECATUR|DECATUR AL",AL,US,Tennessee River,304.0,34.6059,-86.9833,riverport,seeded,manual_seed,2026-05-11,1,Tennessee River destination
+USMOB,Mobile,"MOBILE|MOBILE AL|MOB",AL,US,Mobile River / Tenn-Tom,0.0,30.6954,-88.0399,river_gulf_hybrid,seeded,manual_seed,2026-05-11,1,Gateway between inland river network and Gulf
+USKCY,Kansas City,"KANSAS CITY|KC|KANSAS CITY MO",MO,US,Missouri River,367.0,39.0997,-94.5786,inland_port,seeded,manual_seed,2026-05-11,1,Missouri River destination
+USOMA,Omaha,"OMAHA|OMAHA NE",NE,US,Missouri River,627.0,41.2565,-95.9345,inland_port,seeded,manual_seed,2026-05-11,1,Missouri River destination
+USPOR,Portland,"PORTLAND OR|PORTLAND|PDX",OR,US,Columbia River,102.0,45.5152,-122.6784,inland_ocean_connector,seeded,manual_seed,2026-05-11,1,Columbia River destination
+USLWI,Lewiston,"LEWISTON|LEWISTON ID",ID,US,Snake River,465.0,46.4166,-117.0177,inland_port,seeded,manual_seed,2026-05-11,1,Snake River inland destination

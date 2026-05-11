@@ -297,7 +297,13 @@ def save_enrichment(conn: sqlite3.Connection, mmsi: int, data: dict) -> None:
         f" ON CONFLICT(mmsi) DO UPDATE SET {set_clause}",
         (mmsi, *values),
     )
-    conn.execute("UPDATE ships SET enriched=TRUE WHERE mmsi=?", (mmsi,))
+    if fields.get("vessel_name"):
+        conn.execute(
+            "UPDATE ships SET enriched=TRUE, name=COALESCE(name, ?) WHERE mmsi=?",
+            (fields["vessel_name"], mmsi),
+        )
+    else:
+        conn.execute("UPDATE ships SET enriched=TRUE WHERE mmsi=?", (mmsi,))
     conn.commit()
 
 

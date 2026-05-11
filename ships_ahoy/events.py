@@ -125,11 +125,11 @@ def format_ticker_message(
         A compact single-line string. Example:
         "⚓ CARGO 'ATLANTIC STAR' — ARRIVED — underway"
     """
-    name = (
-        enrichment_row["vessel_name"]
-        if enrichment_row and enrichment_row["vessel_name"]
-        else ship_row["name"]
-    )
+    enrich_name = enrichment_row["vessel_name"] if enrichment_row else None
+    ais_name = ship_row["name"]
+    if ais_name and (ais_name.strip() == "Unknown" or ais_name.strip().isdigit()):
+        ais_name = None
+    name = enrich_name or ais_name
     type_label = _ship_type_label(ship_row["ship_type"])
     event_type = event_row["event_type"]
     status_label = _STATUS_LABELS.get(ship_row["status"], "")
