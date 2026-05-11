@@ -465,7 +465,7 @@ def ticker_preview():
                     logger.exception("ticker_preview: build_playlist error")
                     time.sleep(1.0)
                     continue
-                for text in playlist:
+                for text, _mmsis in playlist:
                     speed = cfg.scroll_speed
                     preview.scroll_text(text, speed_px_per_sec=speed)
                     text_px = max(ESP32_DISPLAY_WIDTH, len(text) * GLYPH_WIDTH_PX)

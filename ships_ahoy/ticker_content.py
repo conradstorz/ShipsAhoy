@@ -5,11 +5,16 @@ playlists for the continuous-cycle ticker service and web preview.
 
 No I/O except DB reads — fully testable without hardware.
 
+``build_playlist`` returns ``list[tuple[str, tuple[int, ...]]]`` where each
+entry is (display_text, mmsi_tuple).  The MMSI tuple carries the ship(s)
+responsible for that entry so the ticker service can call ``mark_ship_shown``
+after scrolling.  Idle entries use an empty MMSI tuple ``()``.
+
 Usage::
 
     chunks = build_ship_chunks(ship_row, enrichment_row, distance_km=1.4, bearing_label="southwest")
     playlist = build_playlist(conn, cfg)
-    for text in playlist:
+    for text, mmsis in playlist:
         driver.scroll_text(text, speed_px_per_sec=cfg.scroll_speed)
 """
 
@@ -69,6 +74,24 @@ def _cardinal_word(degrees: float) -> str:
     """Convert a bearing in degrees to a full compass-direction word."""
     abbr = bearing_to_cardinal(degrees)
     return _CARDINAL_WORDS.get(abbr, abbr)
+
+
+def _is_stationary(ship_row: sqlite3.Row) -> bool:
+    """Return True if the ship is not meaningfully moving."""
+    status = ship_row["status"]
+    if status in (1, 5, 6):  # at anchor, moored, aground
+        return True
+    speed = ship_row["speed"]
+    return speed is not None and speed < 0.5
+
+
+def _display_name(ship_row: sqlite3.Row, enrichment_row: Optional[sqlite3.Row]) -> str:
+    """Return the best available display name for a ship."""
+    enrich_name = enrichment_row["vessel_name"] if enrichment_row else None
+    ais_name = ship_row["name"]
+    if ais_name and (ais_name.strip() == "Unknown" or ais_name.strip().isdigit()):
+        ais_name = None
+    return enrich_name or ais_name or str(ship_row["mmsi"])
 
 
 def _extract_facts(
@@ -172,18 +195,47 @@ def build_idle_chunks(conn: sqlite3.Connection) -> list[str]:
     return ["No ships in range"] + texts
 
 
-def build_playlist(conn: sqlite3.Connection, cfg: Config) -> list[str]:
+def build_playlist(
+    conn: sqlite3.Connection, cfg: Config
+) -> list[tuple[str, tuple[int, ...]]]:
     """Return the full scroll playlist for one cycle.
 
-    If ships are in range: prose chunks for each ship, closest-first.
-    If no ships (or home not configured): idle chunks.
+    Each entry is ``(text, mmsi_tuple)``.  ``mmsi_tuple`` carries the MMSI(s)
+    whose ``ticker_shown_at`` the caller should update after scrolling.
+    Idle entries have an empty MMSI tuple.
+
+    Ordering:
+    - Moving ships sorted by ``ticker_shown_at`` ASC NULLS FIRST (never-shown
+      ships appear before recently-shown ones), with distance as tiebreaker.
+    - Stationary ships (anchored / moored / speed < 0.5 kn) are collapsed into
+      a single ``"At anchor: Name1, Name2, …"`` entry at the end, tagged with
+      all their MMSIs so they are marked shown as a group.
     """
     ships_data = get_in_range_ships_with_distance(conn, cfg)
     if not ships_data:
-        return build_idle_chunks(conn)
+        return [(text, ()) for text in build_idle_chunks(conn)]
+
     mode = "compact" if cfg.compact else "verbose"
-    playlist: list[str] = []
-    for ship_row, enrichment_row, distance_km, bearing_label in ships_data:
+
+    moving = [entry for entry in ships_data if not _is_stationary(entry[0])]
+    stationary = [entry for entry in ships_data if _is_stationary(entry[0])]
+
+    # Sort moving ships: never-shown first, then least-recently-shown, then closest
+    moving.sort(key=lambda x: (
+        x[0]["ticker_shown_at"] is not None,
+        x[0]["ticker_shown_at"] or "",
+        x[2],
+    ))
+
+    playlist: list[tuple[str, tuple[int, ...]]] = []
+    for ship_row, enrichment_row, distance_km, bearing_label in moving:
         facts = _extract_facts(ship_row, enrichment_row, distance_km, bearing_label)
-        playlist.extend(format_ship_display(facts, mode=mode))
+        for chunk in format_ship_display(facts, mode=mode):
+            playlist.append((chunk, (ship_row["mmsi"],)))
+
+    if stationary:
+        names = [_display_name(s, e) for s, e, _, _ in stationary]
+        mmsis = tuple(s["mmsi"] for s, _, _, _ in stationary)
+        playlist.append(("At anchor: " + ", ".join(names), mmsis))
+
     return playlist

@@ -38,8 +38,9 @@ CREATE TABLE IF NOT EXISTS ships (
     destination  TEXT,
     first_seen   DATETIME,
     last_seen    DATETIME,
-    visit_count  INTEGER DEFAULT 0,
-    enriched     BOOLEAN DEFAULT FALSE
+    visit_count      INTEGER DEFAULT 0,
+    enriched         BOOLEAN DEFAULT FALSE,
+    ticker_shown_at  DATETIME DEFAULT NULL
 )
 """
 
@@ -183,6 +184,12 @@ def init_db(path: str, check_same_thread: bool = True) -> sqlite3.Connection:
         "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
         _DEFAULT_SETTINGS,
     )
+    # Migration: add ticker_shown_at to existing databases that pre-date the column
+    try:
+        conn.execute("ALTER TABLE ships ADD COLUMN ticker_shown_at DATETIME DEFAULT NULL")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # column already exists
     conn.commit()
     logger.info("Database opened: {}", path)
     return conn
@@ -429,6 +436,15 @@ def has_open_visit(conn: sqlite3.Connection, mmsi: int) -> bool:
         "SELECT 1 FROM ship_visits WHERE mmsi=? AND departed_at IS NULL LIMIT 1",
         (mmsi,),
     ).fetchone() is not None
+
+
+def mark_ship_shown(conn: sqlite3.Connection, mmsi: int) -> None:
+    """Record that *mmsi* was displayed on the ticker by setting ticker_shown_at=now()."""
+    conn.execute(
+        "UPDATE ships SET ticker_shown_at=? WHERE mmsi=?",
+        (_now_iso(), mmsi),
+    )
+    conn.commit()
 
 
 def mark_ship_departed(conn: sqlite3.Connection, mmsi: int) -> None:

@@ -25,7 +25,7 @@ import time
 from loguru import logger
 
 from ships_ahoy.config import Config
-from ships_ahoy.db import init_db
+from ships_ahoy.db import init_db, mark_ship_shown
 from ships_ahoy.ticker_content import build_playlist
 from ships_ahoy.service_utils import DEFAULT_DB_PATH, configure_logging
 
@@ -70,9 +70,14 @@ def main() -> None:
         while True:
             try:
                 playlist = build_playlist(conn, cfg)
-                for text in playlist:
+                seen_mmsis: set[int] = set()
+                for text, mmsis in playlist:
                     logger.info("Ticker: {}", text)
                     driver.scroll_text(text, speed_px_per_sec=cfg.scroll_speed)
+                    for mmsi in mmsis:
+                        if mmsi not in seen_mmsis:
+                            mark_ship_shown(conn, mmsi)
+                            seen_mmsis.add(mmsi)
                     time.sleep(cfg.gap_sec)
             except Exception:
                 logger.exception("Ticker service loop error")

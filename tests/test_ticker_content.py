@@ -197,14 +197,14 @@ def test_build_playlist_returns_ship_chunks_when_ships_in_range(conn):
     cfg = Config(conn)
     playlist = build_playlist(conn, cfg)
     assert len(playlist) > 0
-    assert any("MV Test" in c for c in playlist)
+    assert any("MV Test" in text for text, _ in playlist)
 
 
 def test_build_playlist_returns_idle_when_no_ships(conn):
-    # conn has home configured but no ships
     cfg = Config(conn)
     playlist = build_playlist(conn, cfg)
-    assert playlist[0] == "No ships in range"
+    assert playlist[0][0] == "No ships in range"
+    assert playlist[0][1] == ()
 
 
 def test_build_playlist_orders_closest_first(conn):
@@ -212,8 +212,8 @@ def test_build_playlist_orders_closest_first(conn):
     _make_ship(conn, mmsi=200000003, name="MV Close", latitude=51.51, longitude=0.1)
     cfg = Config(conn)
     playlist = build_playlist(conn, cfg)
-    close_idx = next(i for i, c in enumerate(playlist) if "MV Close" in c)
-    far_idx   = next(i for i, c in enumerate(playlist) if "MV Far" in c)
+    close_idx = next(i for i, (text, _) in enumerate(playlist) if "MV Close" in text)
+    far_idx   = next(i for i, (text, _) in enumerate(playlist) if "MV Far" in text)
     assert close_idx < far_idx
 
 
@@ -224,4 +224,53 @@ def test_build_playlist_returns_idle_when_home_not_set(conn):
     _make_ship(conn, mmsi=200000004)
     cfg = Config(conn)
     playlist = build_playlist(conn, cfg)
-    assert playlist[0] == "No ships in range"
+    assert playlist[0][0] == "No ships in range"
+
+
+def test_build_playlist_each_entry_is_text_mmsi_tuple(conn):
+    _make_ship(conn, mmsi=200000005, latitude=51.5, longitude=0.1)
+    cfg = Config(conn)
+    playlist = build_playlist(conn, cfg)
+    for entry in playlist:
+        assert isinstance(entry, tuple) and len(entry) == 2
+        text, mmsis = entry
+        assert isinstance(text, str)
+        assert isinstance(mmsis, tuple)
+
+
+def test_build_playlist_groups_stationary_ships(conn):
+    _make_ship(conn, mmsi=200000006, name="MV Anchor", latitude=51.5, longitude=0.1, status=1, speed=0.0)
+    _make_ship(conn, mmsi=200000007, name="MV Moored", latitude=51.5, longitude=0.1, status=5, speed=0.0)
+    cfg = Config(conn)
+    playlist = build_playlist(conn, cfg)
+    anchor_entries = [(text, mmsis) for text, mmsis in playlist if text.startswith("At anchor:")]
+    assert len(anchor_entries) == 1
+    text, mmsis = anchor_entries[0]
+    assert "MV Anchor" in text
+    assert "MV Moored" in text
+    assert 200000006 in mmsis
+    assert 200000007 in mmsis
+
+
+def test_build_playlist_stationary_entry_at_end(conn):
+    _make_ship(conn, mmsi=200000008, name="MV Moving", latitude=51.5, longitude=0.1, status=0, speed=8.5)
+    _make_ship(conn, mmsi=200000009, name="MV Still",  latitude=51.5, longitude=0.1, status=1, speed=0.0)
+    cfg = Config(conn)
+    playlist = build_playlist(conn, cfg)
+    last_text, _ = playlist[-1]
+    assert last_text.startswith("At anchor:")
+
+
+def test_build_playlist_prioritises_never_shown(conn):
+    """A ship with ticker_shown_at=NULL appears before one that was shown."""
+    import datetime
+    old_time = (datetime.datetime.now() - datetime.timedelta(hours=1)).isoformat()
+    _make_ship(conn, mmsi=200000010, name="MV Shown",   latitude=51.5, longitude=0.1, speed=5.0)
+    _make_ship(conn, mmsi=200000011, name="MV Unshown", latitude=51.5, longitude=0.1, speed=5.0)
+    conn.execute("UPDATE ships SET ticker_shown_at=? WHERE mmsi=200000010", (old_time,))
+    conn.commit()
+    cfg = Config(conn)
+    playlist = build_playlist(conn, cfg)
+    unshown_idx = next(i for i, (text, _) in enumerate(playlist) if "MV Unshown" in text)
+    shown_idx   = next(i for i, (text, _) in enumerate(playlist) if "MV Shown" in text)
+    assert unshown_idx < shown_idx

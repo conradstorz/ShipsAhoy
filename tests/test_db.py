@@ -26,6 +26,7 @@ from ships_ahoy.db import (
     record_visit,
     close_visit,
     has_open_visit,
+    mark_ship_shown,
     mark_ship_departed,
     write_display_state,
     get_display_state,
@@ -371,6 +372,30 @@ def test_has_open_visit_false_after_close(conn):
     record_visit(conn, 610000003)
     close_visit(conn, 610000003)
     assert has_open_visit(conn, 610000003) is False
+
+
+# ---------------------------------------------------------------------------
+# mark_ship_shown
+# ---------------------------------------------------------------------------
+
+def test_mark_ship_shown_sets_timestamp(conn):
+    upsert_ship(conn, ShipInfo(mmsi=615000001))
+    row = conn.execute("SELECT ticker_shown_at FROM ships WHERE mmsi=615000001").fetchone()
+    assert row["ticker_shown_at"] is None
+    mark_ship_shown(conn, 615000001)
+    row = conn.execute("SELECT ticker_shown_at FROM ships WHERE mmsi=615000001").fetchone()
+    assert row["ticker_shown_at"] is not None
+
+
+def test_mark_ship_shown_updates_on_second_call(conn):
+    import time as _time
+    upsert_ship(conn, ShipInfo(mmsi=615000002))
+    mark_ship_shown(conn, 615000002)
+    t1 = conn.execute("SELECT ticker_shown_at FROM ships WHERE mmsi=615000002").fetchone()["ticker_shown_at"]
+    _time.sleep(0.01)
+    mark_ship_shown(conn, 615000002)
+    t2 = conn.execute("SELECT ticker_shown_at FROM ships WHERE mmsi=615000002").fetchone()["ticker_shown_at"]
+    assert t2 > t1
 
 
 # ---------------------------------------------------------------------------
