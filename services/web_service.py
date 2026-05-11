@@ -295,6 +295,22 @@ def _runtime_log_entries(n: int = 100) -> list[tuple[str, str]]:
 _gc = _gnc.GeonamesCache()
 
 
+def _ship_type_label(ship_type) -> str:
+    if ship_type is None:
+        return "—"
+    if 70 <= ship_type <= 79:
+        return "Cargo"
+    if 80 <= ship_type <= 89:
+        return "Tanker"
+    if 60 <= ship_type <= 69:
+        return "Passenger"
+    if 30 <= ship_type <= 39:
+        return "Fishing"
+    if 50 <= ship_type <= 59:
+        return "Service"
+    return str(ship_type)
+
+
 def _cities_in_range(home_lat: float, home_lon: float, radius_km: float, n: int = 3) -> list[dict]:
     """Return the n most populous cities within radius_km of home."""
     nearby = []
@@ -343,12 +359,13 @@ def index():
     for row in get_all_ships(conn):
         ship = dict(row)
         if home and ship["latitude"] and ship["longitude"]:
-            ship["distance_km"], ship["bearing"] = distance_info(
-                home[0], home[1], ship["latitude"], ship["longitude"]
-            )
+            km, bearing = distance_info(home[0], home[1], ship["latitude"], ship["longitude"])
+            ship["distance_km"] = round(km, 1)
+            ship["bearing"] = bearing
         else:
             ship["distance_km"] = None
             ship["bearing"] = None
+        ship["type_label"] = _ship_type_label(ship["ship_type"])
         ships.append(ship)
 
     nearby_cities = _cities_in_range(home[0], home[1], cfg.distance_km) if home else []
