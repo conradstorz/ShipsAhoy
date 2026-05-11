@@ -74,13 +74,32 @@ _SERVICE_SCRIPTS = {
 }
 
 
+def _self_and_ancestor_pids() -> set[int]:
+    """Return the PID of this process and all its ancestors."""
+    pids: set[int] = set()
+    pid = os.getpid()
+    while pid > 1:
+        pids.add(pid)
+        try:
+            status = Path(f"/proc/{pid}/status").read_text()
+            for line in status.splitlines():
+                if line.startswith("PPid:"):
+                    pid = int(line.split()[1])
+                    break
+            else:
+                break
+        except OSError:
+            break
+    return pids
+
+
 def _find_competing_services() -> list[tuple[int, str]]:
     """Return list of (pid, cmdline) for ShipsAhoy service processes other than self."""
-    my_pid = os.getpid()
+    exclude = _self_and_ancestor_pids()
     competing = []
     try:
         for entry in Path("/proc").iterdir():
-            if not entry.name.isdigit() or int(entry.name) == my_pid:
+            if not entry.name.isdigit() or int(entry.name) in exclude:
                 continue
             cmdline_file = entry / "cmdline"
             try:
