@@ -205,6 +205,48 @@ def test_download_photo_saves_file(tmp_path):
     assert (tmp_path / "111222333.jpg").exists()
 
 
+# ── --reset-enrichment ────────────────────────────────────────────────────────
+
+def test_reset_enrichment_unmarks_nameless_ships(conn):
+    """Ships with no vessel_name get enriched=FALSE and fetch_attempts reset."""
+    now = __import__("datetime").datetime.now().isoformat()
+    conn.execute(
+        "INSERT INTO ships (mmsi, name, last_seen, first_seen, enriched) VALUES (?,?,?,?,1)",
+        (111000001, "MV Nameless", now, now),
+    )
+    conn.execute(
+        "INSERT INTO enrichment (mmsi, fetch_attempts) VALUES (?,?)", (111000001, 3)
+    )
+    conn.commit()
+
+    svc._reset_enrichment(conn)
+
+    ship = conn.execute("SELECT enriched FROM ships WHERE mmsi=111000001").fetchone()
+    assert ship["enriched"] == 0
+
+    row = conn.execute("SELECT fetch_attempts FROM enrichment WHERE mmsi=111000001").fetchone()
+    assert row["fetch_attempts"] == 0
+
+
+def test_reset_enrichment_leaves_named_ships_alone(conn):
+    """Ships that already have a vessel_name are not touched."""
+    now = __import__("datetime").datetime.now().isoformat()
+    conn.execute(
+        "INSERT INTO ships (mmsi, name, last_seen, first_seen, enriched) VALUES (?,?,?,?,1)",
+        (111000002, "MV Named", now, now),
+    )
+    conn.execute(
+        "INSERT INTO enrichment (mmsi, vessel_name, fetch_attempts) VALUES (?,?,?)",
+        (111000002, "MV Named", 1),
+    )
+    conn.commit()
+
+    svc._reset_enrichment(conn)
+
+    ship = conn.execute("SELECT enriched FROM ships WHERE mmsi=111000002").fetchone()
+    assert ship["enriched"] == 1
+
+
 def test_download_photo_wrong_content_type_returns_none(tmp_path):
     resp = mock.MagicMock()
     resp.headers = {"content-type": "text/html"}

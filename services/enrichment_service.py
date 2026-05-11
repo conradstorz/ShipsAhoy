@@ -54,7 +54,37 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--db", default=DEFAULT_DB_PATH, metavar="PATH")
     parser.add_argument("--photos-dir", default=DEFAULT_PHOTOS_DIR, metavar="DIR")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument(
+        "--reset-enrichment",
+        action="store_true",
+        help="Clear enriched flag and reset fetch_attempts for ships with no vessel name, "
+             "then run the service normally.",
+    )
     return parser
+
+
+def _reset_enrichment(conn) -> None:
+    """Reset enriched=FALSE and fetch_attempts=0 for ships with no vessel name."""
+    result = conn.execute(
+        """
+        UPDATE ships SET enriched = FALSE
+        WHERE mmsi IN (
+            SELECT s.mmsi FROM ships s
+            LEFT JOIN enrichment e ON s.mmsi = e.mmsi
+            WHERE e.vessel_name IS NULL OR e.vessel_name = ''
+        )
+        """
+    )
+    ships_reset = result.rowcount
+    result = conn.execute(
+        "UPDATE enrichment SET fetch_attempts = 0 WHERE vessel_name IS NULL OR vessel_name = ''"
+    )
+    attempts_reset = result.rowcount
+    conn.commit()
+    logger.info(
+        "Reset enrichment: {} ships unmarked, {} fetch_attempt counters cleared",
+        ships_reset, attempts_reset,
+    )
 
 
 def _scrape_shipxplorer(mmsi: int) -> Optional[dict]:
@@ -298,6 +328,9 @@ def main() -> None:
 
     conn = init_db(args.db)
     cfg = Config(conn)
+
+    if args.reset_enrichment:
+        _reset_enrichment(conn)
 
     logger.info("Enrichment service starting.")
 
