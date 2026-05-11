@@ -34,6 +34,11 @@
     <input type="text" id="scroll_speed_px_per_sec" name="scroll_speed_px_per_sec"
            value="{{ settings.scroll_speed_px_per_sec }}">
 
+    <label for="ticker_gap_sec">Ticker Gap Between Messages (sec)</label>
+    <input type="text" id="ticker_gap_sec" name="ticker_gap_sec"
+           value="{{ settings.ticker_gap_sec }}">
+    <p class="hint">Blank pause between each scrolling message. Set to 0 for no gap.</p>
+
     <label for="stale_ship_hours">Stale Ship Hours</label>
     <input type="text" id="stale_ship_hours" name="stale_ship_hours"
            value="{{ settings.stale_ship_hours }}">

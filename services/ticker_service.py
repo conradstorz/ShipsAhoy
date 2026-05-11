@@ -73,6 +73,7 @@ def main() -> None:
                 for text in playlist:
                     logger.info("Ticker: {}", text)
                     driver.scroll_text(text, speed_px_per_sec=cfg.scroll_speed)
+                    time.sleep(cfg.gap_sec)
             except Exception:
                 logger.exception("Ticker service loop error")
                 time.sleep(1)

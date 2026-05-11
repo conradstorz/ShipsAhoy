@@ -70,6 +70,11 @@ class Config:
         return float(self.get("scroll_speed_px_per_sec", "40"))
 
     @property
+    def gap_sec(self) -> float:
+        """Return blank-display pause between ticker messages in seconds."""
+        return float(self.get("ticker_gap_sec", "2"))
+
+    @property
     def enrichment_delay_sec(self) -> float:
         """Return seconds to wait between enrichment scrape requests."""
         return float(self.get("enrichment_delay_sec", "10"))

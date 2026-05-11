@@ -466,6 +466,21 @@ def ticker_preview():
                             return
                         time.sleep(FRAME_INTERVAL)
                         elapsed += FRAME_INTERVAL
+                    # Gap between messages: blank display for gap_sec
+                    gap_elapsed = 0.0
+                    gap_sec = cfg.gap_sec
+                    preview.clear()
+                    while gap_elapsed < gap_sec:
+                        frame = preview.get_current_frame(elapsed_sec=FRAME_INTERVAL)
+                        flat = [list(px) for row in frame for px in row]
+                        yield (
+                            f"data: {_json.dumps({'pixels': flat, 'width': ESP32_DISPLAY_WIDTH, 'height': ESP32_DISPLAY_HEIGHT})}\n\n"
+                        )
+                        frame_count += 1
+                        if max_frames is not None and frame_count >= max_frames:
+                            return
+                        time.sleep(FRAME_INTERVAL)
+                        gap_elapsed += FRAME_INTERVAL
         finally:
             conn.close()
 
@@ -527,7 +542,7 @@ def settings_post():
     # on their next config read (float()/int() would raise ValueError).
     float_keys = [
         "home_lat", "home_lon", "distance_km", "scroll_speed_px_per_sec",
-        "stale_ship_hours", "enrichment_delay_sec",
+        "ticker_gap_sec", "stale_ship_hours", "enrichment_delay_sec",
     ]
     int_keys = ["enrichment_max_attempts"]
 
