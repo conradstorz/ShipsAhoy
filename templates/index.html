@@ -32,6 +32,7 @@
     .ticker-wrap { background: #000; border-radius: 4px; padding: 0.5em; margin-bottom: 1em; overflow-x: auto; }
     .ticker-wrap canvas { display: block; image-rendering: pixelated; border: 1px solid #222; }
     #ticker-status { font-size: 0.7em; color: #555; margin-top: 0.3em; }
+    #refresh-indicator { font-size: 0.75em; color: #888; margin-left: auto; }
   </style>
 </head>
 <body>
@@ -73,6 +74,7 @@
       <strong>{% for city in nearby_cities %}{{ city.name }} ({{ city.distance_km }} km){% if not loop.last %}, {% endif %}{% endfor %}</strong>
     </div>
     {% endif %}
+    <div id="refresh-indicator">Refreshing in <span id="refresh-countdown">30</span>s</div>
   </div>
 
   <p class="log-label">Runtime Log</p>
@@ -187,6 +189,21 @@
 
       initCanvas(displayWidth, displayHeight);
       connect();
+    })();
+  </script>
+  <script>
+    (function () {
+      const INTERVAL = 30;
+      const countdownEl = document.getElementById('refresh-countdown');
+      let remaining = INTERVAL;
+      setInterval(function () {
+        remaining -= 1;
+        if (remaining <= 0) {
+          location.reload();
+        } else {
+          countdownEl.textContent = remaining;
+        }
+      }, 1000);
     })();
   </script>
 </body>
