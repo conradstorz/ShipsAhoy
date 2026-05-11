@@ -75,6 +75,11 @@ class Config:
         return float(self.get("ticker_gap_sec", "2"))
 
     @property
+    def compact(self) -> bool:
+        """Return True to combine all ship facts into one scrolling message per ship."""
+        return self.get("ticker_compact", "0") == "1"
+
+    @property
     def enrichment_delay_sec(self) -> float:
         """Return seconds to wait between enrichment scrape requests."""
         return float(self.get("enrichment_delay_sec", "10"))

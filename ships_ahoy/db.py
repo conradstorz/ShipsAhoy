@@ -116,6 +116,7 @@ _DEFAULT_SETTINGS = [
     ("distance_km", "50"),
     ("scroll_speed_px_per_sec", "40"),
     ("ticker_gap_sec", "2"),
+    ("ticker_compact", "0"),
     ("stale_ship_hours", "1"),
     ("enrichment_delay_sec", "10"),
     ("enrichment_max_attempts", "3"),

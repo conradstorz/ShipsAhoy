@@ -39,6 +39,13 @@
            value="{{ settings.ticker_gap_sec }}">
     <p class="hint">Blank pause between each scrolling message. Set to 0 for no gap.</p>
 
+    <label style="font-weight:bold; margin-top:1em; display:flex; align-items:center; gap:0.5em;">
+      <input type="checkbox" id="ticker_compact" name="ticker_compact" value="1"
+             {{ 'checked' if settings.ticker_compact == '1' else '' }}>
+      Compact mode — combine all facts about each ship into one message
+    </label>
+    <p class="hint">Off: one message per fact (e.g. speed, destination each scroll separately). On: all facts joined into a single scrolling message per ship.</p>
+
     <label for="stale_ship_hours">Stale Ship Hours</label>
     <input type="text" id="stale_ship_hours" name="stale_ship_hours"
            value="{{ settings.stale_ship_hours }}">

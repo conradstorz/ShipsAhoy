@@ -527,6 +527,8 @@ def settings_get():
         "home_lon": cfg.get("home_lon", ""),
         "distance_km": cfg.get("distance_km", "50"),
         "scroll_speed_px_per_sec": cfg.get("scroll_speed_px_per_sec", "40"),
+        "ticker_gap_sec": cfg.get("ticker_gap_sec", "2"),
+        "ticker_compact": cfg.get("ticker_compact", "0"),
         "stale_ship_hours": cfg.get("stale_ship_hours", "1"),
         "enrichment_delay_sec": cfg.get("enrichment_delay_sec", "10"),
         "enrichment_max_attempts": cfg.get("enrichment_max_attempts", "3"),
@@ -563,6 +565,9 @@ def settings_post():
                 cfg.set(key, value)
             except ValueError:
                 logger.warning("Settings: invalid int for {}: {!r} — ignored", key, value)
+
+    # Checkbox fields: absent from POST body when unchecked, so handle separately
+    cfg.set("ticker_compact", "1" if request.form.get("ticker_compact") else "0")
 
     return redirect(url_for("settings_get"))
 

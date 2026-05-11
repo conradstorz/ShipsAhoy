@@ -182,5 +182,9 @@ def build_playlist(conn: sqlite3.Connection, cfg: Config) -> list[str]:
         return build_idle_chunks(conn)
     playlist: list[str] = []
     for ship_row, enrichment_row, distance_km, bearing_label in ships_data:
-        playlist.extend(build_ship_chunks(ship_row, enrichment_row, distance_km, bearing_label))
+        chunks = build_ship_chunks(ship_row, enrichment_row, distance_km, bearing_label)
+        if cfg.compact:
+            playlist.append(" — ".join(chunks))
+        else:
+            playlist.extend(chunks)
     return playlist
