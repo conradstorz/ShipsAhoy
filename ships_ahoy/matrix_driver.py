@@ -123,7 +123,8 @@ class PreviewDriver(MatrixDriver):
             text, color=(255, 255, 255),
             width=self._display_width, height=self._display_height,
         )
-        self._scroll_offset = 0.0
+        # Start off-screen to the right so text scrolls fully across the display
+        self._scroll_offset = -float(self._display_width)
         self._speed = speed_px_per_sec
 
     def show_static(self, text: str, duration_sec: float) -> None:

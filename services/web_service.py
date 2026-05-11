@@ -452,7 +452,8 @@ def ticker_preview():
                     speed = cfg.scroll_speed
                     preview.scroll_text(text, speed_px_per_sec=speed)
                     text_px = max(ESP32_DISPLAY_WIDTH, len(text) * GLYPH_WIDTH_PX)
-                    duration_sec = text_px / max(speed, 1.0)
+                    # Add display_width for the scroll-in from the right
+                    duration_sec = (ESP32_DISPLAY_WIDTH + text_px) / max(speed, 1.0)
                     elapsed = 0.0
                     while elapsed < duration_sec:
                         frame = preview.get_current_frame(elapsed_sec=FRAME_INTERVAL)
