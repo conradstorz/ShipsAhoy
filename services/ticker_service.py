@@ -29,7 +29,6 @@ from ships_ahoy.config import Config
 from ships_ahoy.db import (
     init_db,
     mark_ship_shown,
-    mark_event_displayed,
     get_pending_events,
     batch_mark_events_displayed,
 )
@@ -89,6 +88,7 @@ def main() -> None:
 
                 playlist = build_playlist(conn, cfg)
                 seen_mmsis: set[int] = set()
+                displayed_event_ids: list[int] = []
                 for text, mmsis, event_ids in playlist:
                     logger.info("Ticker: {}", text)
                     driver.scroll_text(text, speed_px_per_sec=cfg.scroll_speed)
@@ -96,9 +96,10 @@ def main() -> None:
                         if mmsi not in seen_mmsis:
                             mark_ship_shown(conn, mmsi)
                             seen_mmsis.add(mmsi)
-                    for event_id in event_ids:
-                        mark_event_displayed(conn, event_id)
+                    displayed_event_ids.extend(event_ids)
                     time.sleep(cfg.gap_sec)
+                if displayed_event_ids:
+                    batch_mark_events_displayed(conn, displayed_event_ids)
             except Exception:
                 logger.exception("Ticker service loop error")
                 time.sleep(1)

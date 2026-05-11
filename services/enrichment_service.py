@@ -394,9 +394,15 @@ def _download_photo(photo_url: str, mmsi: int, photos_dir: Path) -> Optional[str
     if "image" not in content_type:
         return None
     dest = photos_dir / f"{mmsi}.jpg"
-    with open(dest, "wb") as f:
-        for chunk in resp.iter_content(chunk_size=8192):
-            f.write(chunk)
+    tmp = photos_dir / f"{mmsi}.tmp"
+    try:
+        with open(tmp, "wb") as f:
+            for chunk in resp.iter_content(chunk_size=8192):
+                f.write(chunk)
+        tmp.replace(dest)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
     return str(dest)
 
 

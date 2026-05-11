@@ -91,3 +91,17 @@ def test_config_enrichment_max_attempts_returns_int(config):
 def test_config_properties_reflect_updated_values(config):
     config.set("distance_km", "75")
     assert config.distance_km == 75.0
+
+
+def test_config_home_location_returns_none_for_invalid_lat(config):
+    """Non-numeric home_lat must return None, not raise ValueError."""
+    config.set("home_lat", "not-a-number")
+    config.set("home_lon", "0.1")
+    assert config.home_location is None
+
+
+def test_config_home_location_returns_none_for_invalid_lon(config):
+    """Non-numeric home_lon must return None, not raise ValueError."""
+    config.set("home_lat", "51.5")
+    config.set("home_lon", "bad")
+    assert config.home_location is None

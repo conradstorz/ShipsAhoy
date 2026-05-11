@@ -72,6 +72,15 @@ def test_detect_events_returns_list_of_tuples():
     assert all(isinstance(e, tuple) and len(e) == 2 for e in result)
 
 
+def test_detect_events_status_change_detail_uses_ascii_arrow():
+    """ESP32 strips Unicode — detail must use ASCII -> not Unicode →."""
+    old = make_ship(status=1)
+    new = make_ship(status=0)
+    _, detail = detect_events(old, new)[0]
+    assert "->" in detail
+    assert "→" not in detail
+
+
 # ---------------------------------------------------------------------------
 # format_ticker_message
 # ---------------------------------------------------------------------------

@@ -116,7 +116,7 @@ def _extract_facts(
         ais_name = None
     name: str = enrich_name or ais_name or "Unknown vessel"
 
-    flag = ship_row["flag"] or (enrichment_row["flag"] if enrichment_row else None)
+    flag = (enrichment_row["flag"] if enrichment_row else None) or ship_row["flag"]
 
     heading = ship_row["heading"]
     heading_word = _cardinal_word(heading) if heading is not None else None

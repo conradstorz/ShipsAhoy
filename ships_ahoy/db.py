@@ -16,7 +16,7 @@ Usage::
 """
 
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from loguru import logger
@@ -134,7 +134,7 @@ _ENRICHMENT_ALLOWED_COLS = (
 
 def _now_iso() -> str:
     """Return the current UTC time as an ISO 8601 string."""
-    return datetime.now().isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 def init_db(path: str, check_same_thread: bool = True) -> sqlite3.Connection:
@@ -210,8 +210,8 @@ def upsert_ship(conn: sqlite3.Connection, ship: ShipInfo) -> None:
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(mmsi) DO UPDATE SET
             name        = COALESCE(excluded.name, ships.name),
-            ship_type   = excluded.ship_type,
-            flag        = excluded.flag,
+            ship_type   = COALESCE(excluded.ship_type, ships.ship_type),
+            flag        = COALESCE(excluded.flag, ships.flag),
             latitude    = excluded.latitude,
             longitude   = excluded.longitude,
             speed       = excluded.speed,

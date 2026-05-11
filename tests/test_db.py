@@ -399,6 +399,42 @@ def test_mark_ship_shown_updates_on_second_call(conn):
 
 
 # ---------------------------------------------------------------------------
+# upsert_ship COALESCE regression tests
+# ---------------------------------------------------------------------------
+
+def test_upsert_ship_preserves_flag_when_update_has_none(conn):
+    """A position-only update (no flag) must not wipe a previously stored flag."""
+    ship = ShipInfo(mmsi=620000001, flag="GB", ship_type=70)
+    upsert_ship(conn, ship)
+    ship_no_flag = ShipInfo(mmsi=620000001, flag=None, ship_type=None)
+    upsert_ship(conn, ship_no_flag)
+    row = conn.execute("SELECT flag, ship_type FROM ships WHERE mmsi=620000001").fetchone()
+    assert row["flag"] == "GB"
+    assert row["ship_type"] == 70
+
+
+def test_upsert_ship_overwrites_flag_when_update_has_value(conn):
+    """When a new update provides a flag it should replace the old one."""
+    ship = ShipInfo(mmsi=620000002, flag="US")
+    upsert_ship(conn, ship)
+    ship2 = ShipInfo(mmsi=620000002, flag="NO")
+    upsert_ship(conn, ship2)
+    row = conn.execute("SELECT flag FROM ships WHERE mmsi=620000002").fetchone()
+    assert row["flag"] == "NO"
+
+
+# ---------------------------------------------------------------------------
+# _now_iso UTC test
+# ---------------------------------------------------------------------------
+
+def test_now_iso_is_utc():
+    from ships_ahoy.db import _now_iso
+    ts = _now_iso()
+    # UTC isoformat contains +00:00 offset
+    assert "+00:00" in ts or ts.endswith("Z")
+
+
+# ---------------------------------------------------------------------------
 # mark_ship_departed
 # ---------------------------------------------------------------------------
 

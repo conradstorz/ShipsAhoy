@@ -585,7 +585,7 @@ def settings_post():
 
 @app.route("/quips")
 def quips_page():
-    quips = get_all_quips(_conn)
+    quips = get_all_quips(_get_conn())
     return render_template("quips.html", quips=quips)
 
 
@@ -594,19 +594,19 @@ def add_quip_route():
     text = request.form.get("text", "").strip()
     category = request.form.get("category", "quip")
     if text and category in ("quip", "location"):
-        add_quip(_conn, text, category)
+        add_quip(_get_conn(), text, category)
     return redirect(url_for("quips_page"))
 
 
 @app.route("/quips/<int:quip_id>/toggle", methods=["POST"])
 def toggle_quip_route(quip_id: int):
-    toggle_quip(_conn, quip_id)
+    toggle_quip(_get_conn(), quip_id)
     return redirect(url_for("quips_page"))
 
 
 @app.route("/quips/<int:quip_id>/delete", methods=["POST"])
 def delete_quip_route(quip_id: int):
-    delete_quip(_conn, quip_id)
+    delete_quip(_get_conn(), quip_id)
     return redirect(url_for("quips_page"))
 
 

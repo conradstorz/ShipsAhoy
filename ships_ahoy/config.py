@@ -14,6 +14,8 @@ Usage::
 import sqlite3
 from typing import Optional
 
+from loguru import logger
+
 
 class Config:
     """Provides typed access to the settings table.
@@ -52,7 +54,11 @@ class Config:
         lon = self.get("home_lon")
         if lat is None or lon is None:
             return None
-        return (float(lat), float(lon))
+        try:
+            return (float(lat), float(lon))
+        except ValueError:
+            logger.warning("home_lat/home_lon are not valid numbers: {!r}, {!r}", lat, lon)
+            return None
 
     @property
     def distance_km(self) -> float:

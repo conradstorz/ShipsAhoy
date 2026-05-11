@@ -205,6 +205,35 @@ def test_returning_ship_writes_arrived_and_records_visit(conn, cfg):
     assert open_visit is not None
 
 
+def test_no_home_positionless_ship_no_arrived_event():
+    """When home=None, a ship without a position must NOT get an ARRIVED event."""
+    conn = init_db(":memory:")
+    cfg = Config(conn)
+    svc._home_unset_warned = False
+    ship = ShipInfo(mmsi=987000001, name="NO POSITION", latitude=None, longitude=None, status=0)
+    msg = mock.MagicMock()
+    with mock.patch.object(svc._tracker, "update", return_value=ship):
+        svc._process_message(conn, msg, cfg)
+
+    assert conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 0
+
+
+def test_no_home_warning_logged_only_once():
+    """home_location warning must not spam on every AIS message."""
+    conn = init_db(":memory:")
+    cfg = Config(conn)
+    svc._home_unset_warned = False
+    ship = ShipInfo(mmsi=987000002, name="SPAMMER", latitude=0.0, longitude=0.0, status=0)
+    msg = mock.MagicMock()
+    with mock.patch.object(svc._tracker, "update", return_value=ship):
+        with mock.patch("services.ais_service.logger") as mock_logger:
+            svc._process_message(conn, msg, cfg)
+            svc._process_message(conn, msg, cfg)
+    warning_calls = [c for c in mock_logger.warning.call_args_list
+                     if "home_location" in str(c)]
+    assert len(warning_calls) == 1
+
+
 def test_connect_with_backoff_succeeds(monkeypatch):
     """Successful TCP check -> returns an AISReceiver instance."""
     mock_receiver = mock.MagicMock()

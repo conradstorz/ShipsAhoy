@@ -41,6 +41,7 @@ SWEEP_INTERVAL_SEC = 300  # 5 minutes
 MAX_BACKOFF_SEC = 60
 
 _tracker = ShipTracker()
+_home_unset_warned = False
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -112,8 +113,11 @@ def _process_message(conn, msg, cfg: Config) -> None:
             new_ship.latitude, new_ship.longitude, home[0], home[1], cfg.distance_km
         )
     elif home is None:
-        logger.warning("home_location not set — treating all ships as noteworthy")
-        close_enough = True
+        global _home_unset_warned
+        if not _home_unset_warned:
+            logger.warning("home_location not set — treating all ships as noteworthy")
+            _home_unset_warned = True
+        close_enough = (new_ship.latitude is not None and new_ship.longitude is not None)
     else:
         close_enough = False  # ship has no position yet
 

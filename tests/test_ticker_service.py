@@ -51,7 +51,7 @@ def test_main_calls_scroll_text_for_each_chunk():
                 with mock.patch.object(_ts_mod, "get_pending_events", return_value=[]):
                     with mock.patch.object(_ts_mod, "build_playlist", return_value=playlist):
                         with mock.patch.object(_ts_mod, "mark_ship_shown", return_value=None):
-                            with mock.patch.object(_ts_mod, "mark_event_displayed", return_value=None):
+                            with mock.patch.object(_ts_mod, "batch_mark_events_displayed", return_value=None):
                                 with mock.patch.object(_ts_mod, "_DriverClass", return_value=driver):
                                     with pytest.raises(SystemExit) as exc:
                                         _ts_mod.main()
@@ -71,7 +71,7 @@ def test_main_clears_display_on_keyboard_interrupt():
                 with mock.patch.object(_ts_mod, "get_pending_events", return_value=[]):
                     with mock.patch.object(_ts_mod, "build_playlist", return_value=[("chunk", (), ())]):
                         with mock.patch.object(_ts_mod, "mark_ship_shown", return_value=None):
-                            with mock.patch.object(_ts_mod, "mark_event_displayed", return_value=None):
+                            with mock.patch.object(_ts_mod, "batch_mark_events_displayed", return_value=None):
                                 with mock.patch.object(_ts_mod, "_DriverClass", return_value=driver):
                                     with pytest.raises(SystemExit) as exc:
                                         _ts_mod.main()
