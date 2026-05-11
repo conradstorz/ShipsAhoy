@@ -39,21 +39,21 @@ _STATUS_LABELS = {
     15: "undefined",
 }
 
-# AIS ship type ranges → short label
+# AIS ship type ranges → human-readable label
 def _ship_type_label(ship_type: Optional[int]) -> str:
     if ship_type is None:
-        return "VESSEL"
+        return "vessel"
     if 70 <= ship_type <= 79:
-        return "CARGO"
+        return "cargo vessel"
     if 80 <= ship_type <= 89:
-        return "TANKER"
+        return "tanker"
     if 60 <= ship_type <= 69:
-        return "PASSENGER"
+        return "passenger vessel"
     if 30 <= ship_type <= 39:
-        return "FISHING"
+        return "fishing vessel"
     if 50 <= ship_type <= 59:
-        return "SERVICE"
-    return "VESSEL"
+        return "service vessel"
+    return "vessel"
 
 
 class EventType(StrEnum):
@@ -131,8 +131,8 @@ def format_ticker_message(
     ais_name = ship_row["name"]
     if ais_name and (ais_name.strip() == "Unknown" or ais_name.strip().isdigit()):
         ais_name = None
-    name = enrich_name or ais_name or f"vessel {ship_row['mmsi']}"
-    type_label = _ship_type_label(ship_row["ship_type"]).lower()
+    type_label = _ship_type_label(ship_row["ship_type"])
+    name = enrich_name or ais_name or f"an unidentified {type_label}"
     event_type = event_row["event_type"]
     visit_count = ship_row["visit_count"] or 0
 
@@ -141,7 +141,10 @@ def format_ticker_message(
 
     if event_type == EventType.ARRIVED:
         if visit_count <= 1:
-            return f"First sighting: {name} — {type_label}"
+            named = enrich_name or ais_name
+            if named:
+                return f"First sighting: {named} — {type_label}"
+            return f"First sighting of {name}"
         if last_departed_iso is not None:
             try:
                 departed_dt = datetime.fromisoformat(last_departed_iso)

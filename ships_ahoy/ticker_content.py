@@ -94,12 +94,15 @@ def _is_stationary(ship_row: sqlite3.Row) -> bool:
 
 
 def _display_name(ship_row: sqlite3.Row, enrichment_row: Optional[sqlite3.Row]) -> str:
-    """Return the best available display name for a ship."""
+    """Return the best available display name for a ship.
+
+    Falls back to a type-based description — never exposes a bare MMSI.
+    """
     enrich_name = enrichment_row["vessel_name"] if enrichment_row else None
     ais_name = ship_row["name"]
     if ais_name and (ais_name.strip() == "Unknown" or ais_name.strip().isdigit()):
         ais_name = None
-    return enrich_name or ais_name or str(ship_row["mmsi"])
+    return enrich_name or ais_name or f"an unnamed {_type_label(ship_row['ship_type'])}"
 
 
 def _extract_facts(

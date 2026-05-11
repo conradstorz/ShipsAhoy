@@ -194,14 +194,14 @@ class ShipTracker:
         # --- static / voyage data (msg types 5, 24, 21) ---
         shipname = getattr(msg, "shipname", None)
         if shipname:
-            name = str(shipname).strip()
+            name = str(shipname).strip().strip("@").strip()
             if name:
                 ship.name = name
 
         # msg type 21 uses "name" instead of "shipname"
         name_field = getattr(msg, "name", None)
         if name_field:
-            name = str(name_field).strip()
+            name = str(name_field).strip().strip("@").strip()
             if name:
                 ship.name = name
 
