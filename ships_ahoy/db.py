@@ -423,6 +423,14 @@ def close_visit(conn: sqlite3.Connection, mmsi: int) -> None:
     conn.commit()
 
 
+def has_open_visit(conn: sqlite3.Connection, mmsi: int) -> bool:
+    """Return True if there is an open (departed_at IS NULL) visit for *mmsi*."""
+    return conn.execute(
+        "SELECT 1 FROM ship_visits WHERE mmsi=? AND departed_at IS NULL LIMIT 1",
+        (mmsi,),
+    ).fetchone() is not None
+
+
 def mark_ship_departed(conn: sqlite3.Connection, mmsi: int) -> None:
     """Write a DEPARTED event and close the open visit in one atomic transaction.
 

@@ -25,6 +25,7 @@ from ships_ahoy.db import (
     get_visit_history,
     record_visit,
     close_visit,
+    has_open_visit,
     mark_ship_departed,
     write_display_state,
     get_display_state,
@@ -348,6 +349,28 @@ def test_get_visit_history_returns_newest_first(conn):
 
 def test_get_visit_history_empty_for_unknown(conn):
     assert get_visit_history(conn, 999999998) == []
+
+
+# ---------------------------------------------------------------------------
+# has_open_visit
+# ---------------------------------------------------------------------------
+
+def test_has_open_visit_true_when_open(conn):
+    upsert_ship(conn, ShipInfo(mmsi=610000001))
+    record_visit(conn, 610000001)
+    assert has_open_visit(conn, 610000001) is True
+
+
+def test_has_open_visit_false_when_no_visits(conn):
+    upsert_ship(conn, ShipInfo(mmsi=610000002))
+    assert has_open_visit(conn, 610000002) is False
+
+
+def test_has_open_visit_false_after_close(conn):
+    upsert_ship(conn, ShipInfo(mmsi=610000003))
+    record_visit(conn, 610000003)
+    close_visit(conn, 610000003)
+    assert has_open_visit(conn, 610000003) is False
 
 
 # ---------------------------------------------------------------------------

@@ -77,12 +77,16 @@ def test_new_ship_outside_range_no_event(conn, cfg):
 
 
 def test_status_change_writes_event(conn, cfg):
-    """Existing ship changes nav status -> STATUS_CHANGE event written."""
+    """Existing ship with open visit changes nav status -> STATUS_CHANGE event written."""
     now = datetime.now().isoformat()
     conn.execute(
         "INSERT INTO ships (mmsi, name, status, last_seen, first_seen)"
         " VALUES (?, ?, ?, ?, ?)",
         (123456789, "MV Test", 0, now, now),
+    )
+    conn.execute(
+        "INSERT INTO ship_visits (mmsi, arrived_at) VALUES (?, ?)",
+        (123456789, now),
     )
     conn.commit()
 
@@ -166,6 +170,39 @@ def test_run_stale_sweep_skips_fresh_ships(conn, cfg):
     assert conn.execute(
         "SELECT COUNT(*) FROM events WHERE mmsi=999888777"
     ).fetchone()[0] == 0
+
+
+def test_returning_ship_writes_arrived_and_records_visit(conn, cfg):
+    """Ship in DB with a closed visit (departed) re-appears -> ARRIVED event + visit_count++."""
+    now = datetime.now().isoformat()
+    conn.execute(
+        "INSERT INTO ships (mmsi, name, status, last_seen, first_seen, visit_count)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        (123456789, "MV Test", 0, now, now, 1),
+    )
+    conn.execute(
+        "INSERT INTO ship_visits (mmsi, arrived_at, departed_at) VALUES (?, ?, ?)",
+        (123456789, now, now),
+    )
+    conn.commit()
+
+    ship = _make_ship()
+    msg = mock.MagicMock()
+    with mock.patch.object(svc._tracker, "update", return_value=ship):
+        svc._process_message(conn, msg, cfg)
+
+    events = conn.execute(
+        "SELECT * FROM events WHERE event_type='ARRIVED'"
+    ).fetchall()
+    assert len(events) == 1
+
+    row = conn.execute("SELECT visit_count FROM ships WHERE mmsi=123456789").fetchone()
+    assert row["visit_count"] == 2
+
+    open_visit = conn.execute(
+        "SELECT * FROM ship_visits WHERE mmsi=123456789 AND departed_at IS NULL"
+    ).fetchone()
+    assert open_visit is not None
 
 
 def test_connect_with_backoff_succeeds(monkeypatch):

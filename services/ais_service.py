@@ -31,7 +31,7 @@ from loguru import logger
 
 from ships_ahoy.ais_receiver import AISReceiver, DEFAULT_HOST, DEFAULT_TCP_PORT
 from ships_ahoy.config import Config
-from ships_ahoy.db import init_db, get_ship, upsert_ship, write_event, record_visit, mark_ship_departed, get_stale_mmsis
+from ships_ahoy.db import init_db, get_ship, upsert_ship, write_event, record_visit, mark_ship_departed, get_stale_mmsis, has_open_visit
 from ships_ahoy.distance import is_noteworthy
 from ships_ahoy.events import EventType, detect_events
 from ships_ahoy.service_utils import DEFAULT_DB_PATH, configure_logging
@@ -127,7 +127,7 @@ def _process_message(conn, msg, cfg: Config) -> None:
         record_visit(conn, new_ship.mmsi)
         logger.info("ARRIVED: {} (MMSI {})", label, new_ship.mmsi)
     else:
-        # Compare against previous state
+        # Compare against previous state for status-change events
         old_ship = ShipInfo(
             mmsi=old_row["mmsi"],
             name=old_row["name"],
@@ -135,6 +135,13 @@ def _process_message(conn, msg, cfg: Config) -> None:
         )
         for event_type, detail in detect_events(old_ship, new_ship):
             write_event(conn, new_ship.mmsi, event_type, detail)
+        # Re-arrival: ship is in DB but has no open visit (departed since last seen,
+        # either by the stale sweep or because the first upsert had no position).
+        if not has_open_visit(conn, new_ship.mmsi):
+            label = new_ship.name or str(new_ship.mmsi)
+            write_event(conn, new_ship.mmsi, EventType.ARRIVED, f"{label} arrived")
+            record_visit(conn, new_ship.mmsi)
+            logger.info("RE-ARRIVED: {} (MMSI {})", label, new_ship.mmsi)
 
 
 def main() -> None:
