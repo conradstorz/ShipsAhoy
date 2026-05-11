@@ -28,11 +28,19 @@
     details.install-log { margin-bottom: 1.5em; }
     details.install-log summary { font-size: 0.8em; color: #888; cursor: pointer; margin-bottom: 0.25em; }
     details.install-log .log-window { max-height: 12em; margin-bottom: 0; }
+    .ticker-wrap { background: #000; border-radius: 4px; padding: 0.5em; margin-bottom: 1em; overflow-x: auto; }
+    .ticker-wrap canvas { display: block; image-rendering: pixelated; border: 1px solid #222; }
+    #ticker-status { font-size: 0.7em; color: #555; margin-top: 0.3em; }
   </style>
 </head>
 <body>
   <h1>ShipsAhoy</h1>
-  <nav><a href="/events">Events</a> | <a href="/settings">Settings</a> | <a href="/ticker">Ticker Preview</a> | <a href="/quips">Ticker Quips</a> | <a href="/sdr-verify">SDR Verify</a></nav>
+  <nav><a href="/events">Events</a> | <a href="/settings">Settings</a> | <a href="/quips">Ticker Quips</a> | <a href="/sdr-verify">SDR Verify</a></nav>
+
+  <div class="ticker-wrap">
+    <canvas id="ticker"></canvas>
+    <div id="ticker-status">Connecting…</div>
+  </div>
 
   <div class="status-panel">
     <div class="status-item">
@@ -109,5 +117,55 @@
   {% else %}
     <p>No ships seen yet.</p>
   {% endif %}
+  <script>
+    (function () {
+      const LED_PITCH = 4;
+      const LED_SIZE  = 3;
+      const canvas = document.getElementById('ticker');
+      const ctx    = canvas.getContext('2d');
+      const statusEl = document.getElementById('ticker-status');
+      let displayWidth = 600, displayHeight = 32, initialized = false;
+
+      function initCanvas(w, h) {
+        displayWidth = w; displayHeight = h;
+        canvas.width  = w * LED_PITCH - 1;
+        canvas.height = h * LED_PITCH - 1;
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        initialized = true;
+      }
+
+      function drawFrame(pixels, w, h) {
+        if (!initialized || w !== displayWidth || h !== displayHeight) initCanvas(w, h);
+        let i = 0;
+        for (let row = 0; row < h; row++) {
+          for (let col = 0; col < w; col++) {
+            const [r, g, b] = pixels[i++];
+            ctx.fillStyle = `rgb(${r},${g},${b})`;
+            ctx.fillRect(col * LED_PITCH, row * LED_PITCH, LED_SIZE, LED_SIZE);
+          }
+        }
+      }
+
+      function connect() {
+        const es = new EventSource('/ticker/preview');
+        es.onopen = () => { statusEl.textContent = 'Live'; };
+        es.onmessage = (evt) => {
+          try {
+            const { pixels, width, height } = JSON.parse(evt.data);
+            drawFrame(pixels, width, height);
+          } catch (e) { console.error('Frame parse error', e); }
+        };
+        es.onerror = () => {
+          statusEl.textContent = 'Reconnecting…';
+          es.close();
+          setTimeout(connect, 3000);
+        };
+      }
+
+      initCanvas(displayWidth, displayHeight);
+      connect();
+    })();
+  </script>
 </body>
 </html>

@@ -4,7 +4,7 @@ Flask application providing a browser-based interface for browsing ships,
 viewing event history, and adjusting system settings.
 
 Routes:
-    GET  /              Ship list sorted by last_seen, with distance and type
+    GET  /              Dashboard: ship list, ticker preview, status panel, logs
     GET  /ship/<mmsi>   Ship detail: all fields + enrichment + visit history + photo
     GET  /events        Recent 50 events
     GET  /settings      Settings form pre-populated from Config
@@ -489,12 +489,6 @@ def ticker_preview():
         content_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
-
-
-@app.route("/ticker")
-def ticker_page():
-    """Ticker live preview page."""
-    return render_template("ticker_preview.html")
 
 
 @app.route("/sdr-verify")
