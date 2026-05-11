@@ -477,6 +477,9 @@ def main() -> None:
             mmsi_list = get_unenriched_ships(conn, max_attempts)
 
             if not mmsi_list:
+                if args.reset_enrichment:
+                    logger.info("Reset enrichment complete: no ships remaining to enrich.")
+                    sys.exit(0)
                 logger.debug("No ships to enrich; sleeping {}s", delay)
                 time.sleep(delay)
                 continue
@@ -508,6 +511,9 @@ def main() -> None:
                 "Enrichment batch complete: {} enriched, {} failed/deferred",
                 enriched_count, failed_count,
             )
+            if args.reset_enrichment:
+                logger.info("Reset enrichment complete.")
+                sys.exit(0)
 
         except KeyboardInterrupt:
             logger.info("Enrichment service stopped by user.")
