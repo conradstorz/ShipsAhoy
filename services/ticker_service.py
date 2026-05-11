@@ -21,7 +21,7 @@ Usage::
 import argparse
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from loguru import logger
 
@@ -80,7 +80,7 @@ def main() -> None:
                 if len(pending) > 10:
                     try:
                         oldest_dt = datetime.fromisoformat(pending[0]["created_at"])
-                        if datetime.now() - oldest_dt > timedelta(minutes=5):
+                        if datetime.now(timezone.utc) - oldest_dt > timedelta(minutes=5):
                             batch_mark_events_displayed(conn, [e["id"] for e in pending])
                             logger.warning("Flushed {} stale queued events", len(pending))
                     except (ValueError, TypeError):

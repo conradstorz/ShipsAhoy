@@ -150,7 +150,7 @@ def test_format_ticker_message_returning_ship_with_days():
     write_event(conn, 200000002, EventType.ARRIVED, "ship arrived")
     event_row = get_recent_events(conn, limit=1)[0]
     ship_row = conn.execute("SELECT * FROM ships WHERE mmsi=200000002").fetchone()
-    three_days_ago = (_dt.datetime.now() - _dt.timedelta(days=3)).isoformat()
+    three_days_ago = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=3)).isoformat()
     result = format_ticker_message(event_row, ship_row, None, last_departed_iso=three_days_ago)
     assert result is not None
     assert "returns" in result
@@ -168,7 +168,7 @@ def test_format_ticker_message_returning_ship_recent():
     write_event(conn, 200000003, EventType.ARRIVED, "ship arrived")
     event_row = get_recent_events(conn, limit=1)[0]
     ship_row = conn.execute("SELECT * FROM ships WHERE mmsi=200000003").fetchone()
-    one_hour_ago = (_dt.datetime.now() - _dt.timedelta(hours=1)).isoformat()
+    one_hour_ago = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(hours=1)).isoformat()
     result = format_ticker_message(event_row, ship_row, None, last_departed_iso=one_hour_ago)
     assert result is not None
     assert "has arrived" in result
@@ -211,6 +211,24 @@ def test_format_ticker_message_enriched_returns_none():
     ship_row = conn.execute("SELECT * FROM ships WHERE mmsi=200000006").fetchone()
     result = format_ticker_message(event_row, ship_row, None)
     assert result is None
+
+
+def test_format_ticker_message_handles_utc_aware_departed_iso():
+    """departed_at stored as UTC-aware ISO string must not crash or produce wrong days."""
+    import datetime as _dt
+    conn = init_db(":memory:")
+    ship = ShipInfo(mmsi=200000007, name="MV UTC", ship_type=70)
+    upsert_ship(conn, ship)
+    conn.execute("UPDATE ships SET visit_count=3 WHERE mmsi=200000007")
+    conn.commit()
+    write_event(conn, 200000007, EventType.ARRIVED, "ship arrived")
+    event_row = get_recent_events(conn, limit=1)[0]
+    ship_row = conn.execute("SELECT * FROM ships WHERE mmsi=200000007").fetchone()
+    # Use a UTC-aware timestamp (what _now_iso() now produces)
+    two_days_ago = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=2)).isoformat()
+    result = format_ticker_message(event_row, ship_row, None, last_departed_iso=two_days_ago)
+    assert result is not None
+    assert "2 days" in result
 
 
 def test_format_ticker_message_uses_enrichment_name_when_available():

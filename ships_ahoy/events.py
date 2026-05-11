@@ -19,7 +19,7 @@ Usage::
 """
 
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Optional
 
@@ -145,7 +145,7 @@ def format_ticker_message(
         if last_departed_iso is not None:
             try:
                 departed_dt = datetime.fromisoformat(last_departed_iso)
-                days = (datetime.now() - departed_dt).days
+                days = (datetime.now(timezone.utc) - departed_dt).days
                 if days >= 1:
                     day_str = f"{days} day{'s' if days != 1 else ''}"
                     return f"{name} returns — away {day_str}"

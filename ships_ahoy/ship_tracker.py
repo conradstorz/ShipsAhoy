@@ -6,7 +6,7 @@ updated whenever a new AIS position or static-data message arrives.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional
 
 from loguru import logger
@@ -99,7 +99,7 @@ class ShipInfo:
     status: Optional[int] = None        # AIS navigation status code
     destination: Optional[str] = None  # port of destination from AIS type-5
     flag: Optional[str] = None         # country flag code from AIS type-24
-    last_seen: datetime = field(default_factory=datetime.now)
+    last_seen: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     @property
     def position(self) -> Optional[tuple]:
@@ -151,7 +151,7 @@ class ShipTracker:
             logger.debug("First contact: MMSI {}", mmsi)
 
         ship = self._ships[mmsi]
-        ship.last_seen = datetime.now()
+        ship.last_seen = datetime.now(timezone.utc)
 
         # --- position / kinematic fields (msg types 1, 2, 3, 18) ---
         lat = getattr(msg, "lat", None)

@@ -1,6 +1,6 @@
 """Tests for ships_ahoy.ship_tracker."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -46,9 +46,9 @@ class TestShipInfo:
         assert ship.name is None
 
     def test_last_seen_set_on_creation(self):
-        before = datetime.now()
+        before = datetime.now(timezone.utc)
         ship = ShipInfo(mmsi=123456789)
-        after = datetime.now()
+        after = datetime.now(timezone.utc)
         assert before <= ship.last_seen <= after
 
     def test_ship_info_has_destination_field(self):

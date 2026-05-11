@@ -334,9 +334,10 @@ def write_event(
 
 
 def get_pending_events(conn: sqlite3.Connection) -> list[sqlite3.Row]:
-    """Return all events where displayed_at IS NULL, ordered by created_at ASC."""
+    """Return displayable pending events (not ENRICHED), ordered by created_at ASC."""
     return conn.execute(
-        "SELECT * FROM events WHERE displayed_at IS NULL ORDER BY created_at ASC"
+        "SELECT * FROM events WHERE displayed_at IS NULL AND event_type != 'ENRICHED'"
+        " ORDER BY created_at ASC"
     ).fetchall()
 
 

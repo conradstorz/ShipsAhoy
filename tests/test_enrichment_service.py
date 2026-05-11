@@ -178,6 +178,7 @@ def test_enrich_ship_returns_first_success(photos_dir):
 def test_enrich_ship_falls_through_on_failure(photos_dir):
     itu_data = {"vessel_name": "MV Third", "source": "itu"}
     with mock.patch.object(svc, "_scrape_shipxplorer", side_effect=Exception("fail")), \
+         mock.patch.object(svc, "_scrape_myshiptracking", return_value=None), \
          mock.patch.object(svc, "_scrape_marinetraffic", return_value=None), \
          mock.patch.object(svc, "_scrape_itu", return_value=itu_data):
         result = svc._enrich_ship(123456789, photos_dir)
@@ -186,6 +187,7 @@ def test_enrich_ship_falls_through_on_failure(photos_dir):
 
 def test_enrich_ship_all_fail_returns_none(photos_dir):
     with mock.patch.object(svc, "_scrape_shipxplorer", side_effect=Exception), \
+         mock.patch.object(svc, "_scrape_myshiptracking", side_effect=Exception), \
          mock.patch.object(svc, "_scrape_marinetraffic", side_effect=Exception), \
          mock.patch.object(svc, "_scrape_itu", side_effect=Exception):
         result = svc._enrich_ship(123456789, photos_dir)

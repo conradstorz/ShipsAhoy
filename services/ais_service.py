@@ -25,7 +25,7 @@ import argparse
 import socket
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from loguru import logger
 
@@ -82,7 +82,7 @@ def _connect_with_backoff(host: str, port: int, use_udp: bool) -> AISReceiver:
 
 def _run_stale_sweep(conn, cfg: Config) -> None:
     """Query for ships past stale_ship_hours that still have an open visit, and mark each departed."""
-    threshold = (datetime.now() - timedelta(hours=cfg.stale_ship_hours)).isoformat()
+    threshold = (datetime.now(timezone.utc) - timedelta(hours=cfg.stale_ship_hours)).isoformat()
     for mmsi in get_stale_mmsis(conn, threshold):
         try:
             mark_ship_departed(conn, mmsi)
@@ -125,10 +125,11 @@ def _process_message(conn, msg, cfg: Config) -> None:
         return
 
     if old_row is None:
-        # First time we've seen this ship
+        # First time we've seen this ship — record_visit first so visit_count
+        # is already incremented when the ticker reads the ARRIVED event.
         label = new_ship.name or str(new_ship.mmsi)
-        write_event(conn, new_ship.mmsi, EventType.ARRIVED, f"{label} arrived")
         record_visit(conn, new_ship.mmsi)
+        write_event(conn, new_ship.mmsi, EventType.ARRIVED, f"{label} arrived")
         logger.info("ARRIVED: {} (MMSI {})", label, new_ship.mmsi)
     else:
         # Compare against previous state for status-change events
@@ -143,8 +144,8 @@ def _process_message(conn, msg, cfg: Config) -> None:
         # either by the stale sweep or because the first upsert had no position).
         if not has_open_visit(conn, new_ship.mmsi):
             label = new_ship.name or str(new_ship.mmsi)
-            write_event(conn, new_ship.mmsi, EventType.ARRIVED, f"{label} arrived")
             record_visit(conn, new_ship.mmsi)
+            write_event(conn, new_ship.mmsi, EventType.ARRIVED, f"{label} arrived")
             logger.info("RE-ARRIVED: {} (MMSI {})", label, new_ship.mmsi)
 
 

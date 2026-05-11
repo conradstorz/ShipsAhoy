@@ -28,6 +28,7 @@ Usage::
 
 import argparse
 import os
+import subprocess
 import signal
 import sqlite3
 import sys
@@ -124,7 +125,10 @@ def _stop_competing_services() -> bool:
 
     logger.info("Stopping {} competing ShipsAhoy service(s)...", len(competing))
     # Try systemctl first so the supervisor doesn't restart services mid-reset
-    os.system("systemctl stop ships-ahoy.target 2>/dev/null")
+    subprocess.run(
+        ["systemctl", "stop", "ships-ahoy.target"],
+        capture_output=True, check=False,
+    )
     pids = []
     for pid, cmd in competing:
         # Extract the script name for readable logging

@@ -266,7 +266,7 @@ def test_build_playlist_stationary_entry_at_end(conn):
 def test_build_playlist_prioritises_never_shown(conn):
     """A ship with ticker_shown_at=NULL appears before one that was shown."""
     import datetime
-    old_time = (datetime.datetime.now() - datetime.timedelta(hours=1)).isoformat()
+    old_time = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)).isoformat()
     _make_ship(conn, mmsi=200000010, name="MV Shown",   latitude=51.5, longitude=0.1, speed=5.0)
     _make_ship(conn, mmsi=200000011, name="MV Unshown", latitude=51.5, longitude=0.1, speed=5.0)
     conn.execute("UPDATE ships SET ticker_shown_at=? WHERE mmsi=200000010", (old_time,))

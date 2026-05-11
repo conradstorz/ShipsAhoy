@@ -4,7 +4,7 @@ Tests call internal functions directly against a real :memory: SQLite database.
 External I/O (sockets, time.sleep) is mocked.
 """
 import socket
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 import pytest
@@ -45,7 +45,7 @@ def _make_ship(mmsi=123456789, lat=51.5, lon=0.0, status=0, name="MV Test"):
         latitude=lat,
         longitude=lon,
         status=status,
-        last_seen=datetime.now(),
+        last_seen=datetime.now(timezone.utc),
     )
 
 
@@ -78,7 +78,7 @@ def test_new_ship_outside_range_no_event(conn, cfg):
 
 def test_status_change_writes_event(conn, cfg):
     """Existing ship with open visit changes nav status -> STATUS_CHANGE event written."""
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     conn.execute(
         "INSERT INTO ships (mmsi, name, status, last_seen, first_seen)"
         " VALUES (?, ?, ?, ?, ?)",
@@ -127,7 +127,7 @@ def test_message_returns_none_is_noop(conn, cfg):
 
 def test_run_stale_sweep_marks_departed(conn, cfg):
     """Ship with open visit last seen 2 hours ago -> DEPARTED event written."""
-    old_time = (datetime.now() - timedelta(hours=2)).isoformat()
+    old_time = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
     conn.execute(
         "INSERT INTO ships (mmsi, name, last_seen, first_seen) VALUES (?, ?, ?, ?)",
         (111222333, "Stale Ship", old_time, old_time),
@@ -154,7 +154,7 @@ def test_run_stale_sweep_marks_departed(conn, cfg):
 
 def test_run_stale_sweep_skips_fresh_ships(conn, cfg):
     """Ship last seen moments ago -> no DEPARTED event."""
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     conn.execute(
         "INSERT INTO ships (mmsi, name, last_seen, first_seen) VALUES (?, ?, ?, ?)",
         (999888777, "Fresh Ship", now, now),
@@ -174,7 +174,7 @@ def test_run_stale_sweep_skips_fresh_ships(conn, cfg):
 
 def test_returning_ship_writes_arrived_and_records_visit(conn, cfg):
     """Ship in DB with a closed visit (departed) re-appears -> ARRIVED event + visit_count++."""
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     conn.execute(
         "INSERT INTO ships (mmsi, name, status, last_seen, first_seen, visit_count)"
         " VALUES (?, ?, ?, ?, ?, ?)",
@@ -203,6 +203,18 @@ def test_returning_ship_writes_arrived_and_records_visit(conn, cfg):
         "SELECT * FROM ship_visits WHERE mmsi=123456789 AND departed_at IS NULL"
     ).fetchone()
     assert open_visit is not None
+
+
+def test_new_ship_visit_count_incremented_before_arrived_event(conn, cfg):
+    """visit_count must be >= 1 by the time the ARRIVED event is written so that
+    format_ticker_message shows the right message (not 'First sighting' on visit 2)."""
+    ship = _make_ship()
+    msg = mock.MagicMock()
+    with mock.patch.object(svc._tracker, "update", return_value=ship):
+        svc._process_message(conn, msg, cfg)
+
+    row = conn.execute("SELECT visit_count FROM ships WHERE mmsi=123456789").fetchone()
+    assert row["visit_count"] >= 1
 
 
 def test_no_home_positionless_ship_no_arrived_event():

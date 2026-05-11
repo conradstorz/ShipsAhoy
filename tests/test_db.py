@@ -199,6 +199,17 @@ def test_get_pending_events_ordered_by_created_at(conn):
     assert mmsis == sorted(mmsis)
 
 
+def test_get_pending_events_excludes_enriched(conn):
+    """ENRICHED events must never appear in the pending queue (they waste cap slots)."""
+    ship = ShipInfo(mmsi=100000010)
+    upsert_ship(conn, ship)
+    write_event(conn, 100000010, EventType.ENRICHED, "enriched")
+    write_event(conn, 100000010, EventType.ARRIVED, "arrived")
+    events = get_pending_events(conn)
+    assert len(events) == 1
+    assert events[0]["event_type"] == EventType.ARRIVED
+
+
 def test_mark_event_displayed_sets_timestamp(conn):
     ship = ShipInfo(mmsi=888888888)
     upsert_ship(conn, ship)
