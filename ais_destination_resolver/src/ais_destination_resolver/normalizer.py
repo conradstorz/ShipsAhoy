@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 import unicodedata
 
+from .uscg_codes import translate_uscg_code
+
 _DIRECTION_WORDS = {
     "TO",
     "FOR",
@@ -39,6 +41,26 @@ _STATE_SUFFIXES = {
     "ID",
 }
 
+# Matches the structured AIS voyage format: CC^ORIGIN>DEST
+# e.g. "US^0WF3>0TNR" → country="US", origin="0WF3", dest="0TNR"
+_VOYAGE_LOCODE_RE = re.compile(
+    r"^([A-Z]{2})\^([A-Z0-9]{1,5})>([A-Z0-9]{1,5})\s*$",
+    re.IGNORECASE,
+)
+
+
+def _extract_voyage_destination(value: str) -> str | None:
+    """If *value* matches CC^ORIGIN>DEST format, return the destination LOCODE string.
+
+    :param value: Raw AIS destination text.
+    :return: Concatenated country+destination code (e.g. "US0TNR"), or None.
+    """
+    m = _VOYAGE_LOCODE_RE.match(value.strip())
+    if m:
+        country, _origin, destination = m.groups()
+        return (country + destination).upper()
+    return None
+
 
 def normalize_destination(value: str | None, *, keep_state: bool = True) -> str:
     """Return a normalized AIS destination string.
@@ -50,6 +72,13 @@ def normalize_destination(value: str | None, *, keep_state: bool = True) -> str:
 
     if not value:
         return ""
+
+    # Pre-process structured voyage field (CC^ORIGIN>DEST) before generic stripping.
+    voyage_dest = _extract_voyage_destination(value)
+    if voyage_dest is not None:
+        # Try to translate the USCG location code to a plain-text name.
+        translated = translate_uscg_code(voyage_dest)
+        value = translated if translated is not None else voyage_dest
 
     text = unicodedata.normalize("NFKD", value)
     text = text.encode("ascii", "ignore").decode("ascii")
