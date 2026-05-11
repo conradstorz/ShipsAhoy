@@ -104,13 +104,104 @@ def test_format_ticker_message_contains_ship_name(db_rows):
 def test_format_ticker_message_contains_event_type(db_rows):
     event_row, ship_row, enrichment_row = db_rows
     result = format_ticker_message(event_row, ship_row, enrichment_row)
-    assert "ARRIVED" in result.upper() or "arrived" in result.lower()
+    result_lower = result.lower()
+    # First-visit ARRIVED uses "first sighting"; re-arrival uses "arrived" or "returns"
+    assert "arrived" in result_lower or "first sighting" in result_lower or "returns" in result_lower
 
 
 def test_format_ticker_message_is_single_line(db_rows):
     event_row, ship_row, enrichment_row = db_rows
     result = format_ticker_message(event_row, ship_row, enrichment_row)
     assert "\n" not in result
+
+
+def test_format_ticker_message_first_sighting():
+    """visit_count == 0 → 'First sighting: …'"""
+    conn = init_db(":memory:")
+    ship = ShipInfo(mmsi=200000001, name="MV FIRST", ship_type=70)
+    upsert_ship(conn, ship)
+    write_event(conn, 200000001, EventType.ARRIVED, "ship arrived")
+    event_row = get_recent_events(conn, limit=1)[0]
+    ship_row = conn.execute("SELECT * FROM ships WHERE mmsi=200000001").fetchone()
+    result = format_ticker_message(event_row, ship_row, None)
+    assert result is not None
+    assert "First sighting" in result
+    assert "MV FIRST" in result
+    assert "cargo" in result
+
+
+def test_format_ticker_message_returning_ship_with_days():
+    """visit_count > 1 + last_departed > 1 day → 'returns — away N days'"""
+    import datetime as _dt
+    conn = init_db(":memory:")
+    ship = ShipInfo(mmsi=200000002, name="MV RETURNER", ship_type=80)
+    upsert_ship(conn, ship)
+    conn.execute("UPDATE ships SET visit_count=3 WHERE mmsi=200000002")
+    conn.commit()
+    write_event(conn, 200000002, EventType.ARRIVED, "ship arrived")
+    event_row = get_recent_events(conn, limit=1)[0]
+    ship_row = conn.execute("SELECT * FROM ships WHERE mmsi=200000002").fetchone()
+    three_days_ago = (_dt.datetime.now() - _dt.timedelta(days=3)).isoformat()
+    result = format_ticker_message(event_row, ship_row, None, last_departed_iso=three_days_ago)
+    assert result is not None
+    assert "returns" in result
+    assert "3 days" in result
+
+
+def test_format_ticker_message_returning_ship_recent():
+    """visit_count > 1 + last_departed < 1 day → 'has arrived — visit N'"""
+    import datetime as _dt
+    conn = init_db(":memory:")
+    ship = ShipInfo(mmsi=200000003, name="MV RECENT", ship_type=70)
+    upsert_ship(conn, ship)
+    conn.execute("UPDATE ships SET visit_count=2 WHERE mmsi=200000003")
+    conn.commit()
+    write_event(conn, 200000003, EventType.ARRIVED, "ship arrived")
+    event_row = get_recent_events(conn, limit=1)[0]
+    ship_row = conn.execute("SELECT * FROM ships WHERE mmsi=200000003").fetchone()
+    one_hour_ago = (_dt.datetime.now() - _dt.timedelta(hours=1)).isoformat()
+    result = format_ticker_message(event_row, ship_row, None, last_departed_iso=one_hour_ago)
+    assert result is not None
+    assert "has arrived" in result
+    assert "visit 2" in result
+
+
+def test_format_ticker_message_departed():
+    conn = init_db(":memory:")
+    ship = ShipInfo(mmsi=200000004, name="MV GONE", ship_type=70)
+    upsert_ship(conn, ship)
+    write_event(conn, 200000004, EventType.DEPARTED, "Ship departed")
+    event_row = get_recent_events(conn, limit=1)[0]
+    ship_row = conn.execute("SELECT * FROM ships WHERE mmsi=200000004").fetchone()
+    result = format_ticker_message(event_row, ship_row, None)
+    assert result is not None
+    assert "has departed" in result
+    assert "MV GONE" in result
+
+
+def test_format_ticker_message_status_change():
+    conn = init_db(":memory:")
+    ship = ShipInfo(mmsi=200000005, name="MV CHANGE", ship_type=70)
+    upsert_ship(conn, ship)
+    write_event(conn, 200000005, EventType.STATUS_CHANGE, "MV CHANGE status: underway → moored")
+    event_row = get_recent_events(conn, limit=1)[0]
+    ship_row = conn.execute("SELECT * FROM ships WHERE mmsi=200000005").fetchone()
+    result = format_ticker_message(event_row, ship_row, None)
+    assert result is not None
+    assert "status:" in result
+    assert "underway" in result
+    assert "moored" in result
+
+
+def test_format_ticker_message_enriched_returns_none():
+    conn = init_db(":memory:")
+    ship = ShipInfo(mmsi=200000006, name="MV ENRICHED")
+    upsert_ship(conn, ship)
+    write_event(conn, 200000006, EventType.ENRICHED, "enriched")
+    event_row = get_recent_events(conn, limit=1)[0]
+    ship_row = conn.execute("SELECT * FROM ships WHERE mmsi=200000006").fetchone()
+    result = format_ticker_message(event_row, ship_row, None)
+    assert result is None
 
 
 def test_format_ticker_message_uses_enrichment_name_when_available():

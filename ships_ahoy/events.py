@@ -19,6 +19,7 @@ Usage::
 """
 
 import sqlite3
+from datetime import datetime
 from enum import StrEnum
 from typing import Optional
 
@@ -107,35 +108,58 @@ def format_ticker_message(
     event_row: sqlite3.Row,
     ship_row: sqlite3.Row,
     enrichment_row: Optional[sqlite3.Row],
-) -> str:
-    """Produce a single-line string for the LED ticker display.
+    last_departed_iso: Optional[str] = None,
+) -> Optional[str]:
+    """Produce a single-line string for the LED ticker display, or None to skip.
+
+    Returns None for ENRICHED events (internal housekeeping, not worth displaying).
 
     Parameters
     ----------
     event_row:
-        Row from the events table (must have event_type, detail, mmsi columns).
+        Row from the events table.
     ship_row:
         Row from the ships table for the event's MMSI.
     enrichment_row:
-        Row from the enrichment table, or None if no enrichment exists.
-
-    Returns
-    -------
-    str
-        A compact single-line string. Example:
-        "⚓ CARGO 'ATLANTIC STAR' — ARRIVED — underway"
+        Row from the enrichment table, or None.
+    last_departed_iso:
+        ISO timestamp of the ship's most recent departure.  When provided and
+        the ship has been away ≥1 day, the ARRIVED message reads
+        "returns — away N days" instead of "has arrived — visit N".
     """
     enrich_name = enrichment_row["vessel_name"] if enrichment_row else None
     ais_name = ship_row["name"]
     if ais_name and (ais_name.strip() == "Unknown" or ais_name.strip().isdigit()):
         ais_name = None
-    name = enrich_name or ais_name
-    type_label = _ship_type_label(ship_row["ship_type"])
+    name = enrich_name or ais_name or f"vessel {ship_row['mmsi']}"
+    type_label = _ship_type_label(ship_row["ship_type"]).lower()
     event_type = event_row["event_type"]
-    status_label = _STATUS_LABELS.get(ship_row["status"], "")
+    visit_count = ship_row["visit_count"] or 0
 
-    parts = [f"{type_label} '{name}' — {event_type}"]
-    if status_label:
-        parts.append(status_label)
+    if event_type == EventType.ENRICHED:
+        return None
 
-    return " — ".join(parts)
+    if event_type == EventType.ARRIVED:
+        if visit_count <= 1:
+            return f"First sighting: {name} — {type_label}"
+        if last_departed_iso is not None:
+            try:
+                departed_dt = datetime.fromisoformat(last_departed_iso)
+                days = (datetime.now() - departed_dt).days
+                if days >= 1:
+                    day_str = f"{days} day{'s' if days != 1 else ''}"
+                    return f"{name} returns — away {day_str}"
+            except (ValueError, TypeError):
+                pass
+        return f"{name} has arrived — visit {visit_count}"
+
+    if event_type == EventType.DEPARTED:
+        return f"{name} has departed"
+
+    if event_type == EventType.STATUS_CHANGE:
+        # detail is "Name status: old → new" — rebuild with the best available name
+        parts = event_row["detail"].split(" status: ", 1)
+        status_part = parts[1] if len(parts) == 2 else event_row["detail"]
+        return f"{name} status: {status_part}"
+
+    return event_row["detail"]

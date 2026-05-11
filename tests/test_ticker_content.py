@@ -197,7 +197,7 @@ def test_build_playlist_returns_ship_chunks_when_ships_in_range(conn):
     cfg = Config(conn)
     playlist = build_playlist(conn, cfg)
     assert len(playlist) > 0
-    assert any("MV Test" in text for text, _ in playlist)
+    assert any("MV Test" in text for text, _, _ in playlist)
 
 
 def test_build_playlist_returns_idle_when_no_ships(conn):
@@ -205,6 +205,7 @@ def test_build_playlist_returns_idle_when_no_ships(conn):
     playlist = build_playlist(conn, cfg)
     assert playlist[0][0] == "No ships in range"
     assert playlist[0][1] == ()
+    assert playlist[0][2] == ()
 
 
 def test_build_playlist_orders_closest_first(conn):
@@ -212,8 +213,8 @@ def test_build_playlist_orders_closest_first(conn):
     _make_ship(conn, mmsi=200000003, name="MV Close", latitude=51.51, longitude=0.1)
     cfg = Config(conn)
     playlist = build_playlist(conn, cfg)
-    close_idx = next(i for i, (text, _) in enumerate(playlist) if "MV Close" in text)
-    far_idx   = next(i for i, (text, _) in enumerate(playlist) if "MV Far" in text)
+    close_idx = next(i for i, (text, _, _) in enumerate(playlist) if "MV Close" in text)
+    far_idx   = next(i for i, (text, _, _) in enumerate(playlist) if "MV Far" in text)
     assert close_idx < far_idx
 
 
@@ -227,15 +228,16 @@ def test_build_playlist_returns_idle_when_home_not_set(conn):
     assert playlist[0][0] == "No ships in range"
 
 
-def test_build_playlist_each_entry_is_text_mmsi_tuple(conn):
+def test_build_playlist_each_entry_is_3_tuple(conn):
     _make_ship(conn, mmsi=200000005, latitude=51.5, longitude=0.1)
     cfg = Config(conn)
     playlist = build_playlist(conn, cfg)
     for entry in playlist:
-        assert isinstance(entry, tuple) and len(entry) == 2
-        text, mmsis = entry
+        assert isinstance(entry, tuple) and len(entry) == 3
+        text, mmsis, event_ids = entry
         assert isinstance(text, str)
         assert isinstance(mmsis, tuple)
+        assert isinstance(event_ids, tuple)
 
 
 def test_build_playlist_groups_stationary_ships(conn):
@@ -243,7 +245,7 @@ def test_build_playlist_groups_stationary_ships(conn):
     _make_ship(conn, mmsi=200000007, name="MV Moored", latitude=51.5, longitude=0.1, status=5, speed=0.0)
     cfg = Config(conn)
     playlist = build_playlist(conn, cfg)
-    anchor_entries = [(text, mmsis) for text, mmsis in playlist if text.startswith("At anchor:")]
+    anchor_entries = [(text, mmsis) for text, mmsis, _ in playlist if text.startswith("At anchor:")]
     assert len(anchor_entries) == 1
     text, mmsis = anchor_entries[0]
     assert "MV Anchor" in text
@@ -257,7 +259,7 @@ def test_build_playlist_stationary_entry_at_end(conn):
     _make_ship(conn, mmsi=200000009, name="MV Still",  latitude=51.5, longitude=0.1, status=1, speed=0.0)
     cfg = Config(conn)
     playlist = build_playlist(conn, cfg)
-    last_text, _ = playlist[-1]
+    last_text, _, _ = playlist[-1]
     assert last_text.startswith("At anchor:")
 
 
@@ -271,6 +273,37 @@ def test_build_playlist_prioritises_never_shown(conn):
     conn.commit()
     cfg = Config(conn)
     playlist = build_playlist(conn, cfg)
-    unshown_idx = next(i for i, (text, _) in enumerate(playlist) if "MV Unshown" in text)
-    shown_idx   = next(i for i, (text, _) in enumerate(playlist) if "MV Shown" in text)
+    unshown_idx = next(i for i, (text, _, _) in enumerate(playlist) if "MV Unshown" in text)
+    shown_idx   = next(i for i, (text, _, _) in enumerate(playlist) if "MV Shown" in text)
     assert unshown_idx < shown_idx
+
+
+def test_build_playlist_prepends_pending_events(conn):
+    """Pending events appear before ship info chunks."""
+    from ships_ahoy.db import write_event
+    from ships_ahoy.events import EventType
+    _make_ship(conn, mmsi=200000012, name="MV Event", latitude=51.5, longitude=0.1, speed=5.0)
+    write_event(conn, 200000012, EventType.ARRIVED, "MV Event arrived")
+    cfg = Config(conn)
+    playlist = build_playlist(conn, cfg)
+    # First entry should be the event (event_ids non-empty), ship chunks follow
+    event_entries = [(i, text, ev) for i, (text, _, ev) in enumerate(playlist) if ev]
+    ship_entries  = [(i, text) for i, (text, mmsis, ev) in enumerate(playlist)
+                     if not ev and mmsis]
+    assert event_entries, "expected at least one event entry"
+    assert ship_entries,  "expected at least one ship entry"
+    assert event_entries[0][0] < ship_entries[0][0], "events must precede ship chunks"
+
+
+def test_build_playlist_shows_events_when_no_ships_in_range(conn):
+    """Events are shown even when no ships are currently in range."""
+    from ships_ahoy.db import write_event
+    from ships_ahoy.events import EventType
+    # Ship outside the range circle so get_in_range_ships_with_distance returns []
+    _make_ship(conn, mmsi=200000013, name="MV Far Away", latitude=0.0, longitude=0.0, speed=5.0)
+    write_event(conn, 200000013, EventType.DEPARTED, "MV Far Away departed")
+    cfg = Config(conn)
+    playlist = build_playlist(conn, cfg)
+    # Should not fall back to idle — should contain the DEPARTED event
+    assert playlist[0][0] != "No ships in range"
+    assert any("departed" in text.lower() for text, _, _ in playlist)

@@ -23,9 +23,17 @@ import sqlite3
 from typing import Optional
 
 from ships_ahoy.config import Config
-from ships_ahoy.db import get_active_quips, get_enrichment, get_ships_in_range
+from ships_ahoy.db import (
+    get_active_quips,
+    get_enrichment,
+    get_pending_events,
+    get_ship,
+    get_ships_in_range,
+    get_visit_history,
+)
 from ships_ahoy.distance import bearing_to_cardinal, distance_info
 from ships_ahoy.destination import resolve_destination
+from ships_ahoy.events import EventType, format_ticker_message
 from ships_ahoy.message_builder import format_ship_display
 
 _STATUS_LABELS: dict[int, str] = {
@@ -187,6 +195,39 @@ def get_in_range_ships_with_distance(
     return result
 
 
+def _pending_event_entries(
+    conn: sqlite3.Connection,
+) -> list[tuple[str, tuple[int, ...], tuple[int, ...]]]:
+    """Return ticker entries for pending (undisplayed) events, capped at 5 per cycle.
+
+    ENRICHED events are silently skipped.  The caller is responsible for calling
+    mark_event_displayed() on each returned event_id after scrolling.
+    """
+    entries: list[tuple[str, tuple[int, ...], tuple[int, ...]]] = []
+    for event_row in get_pending_events(conn)[:5]:
+        mmsi = event_row["mmsi"]
+        ship_row = get_ship(conn, mmsi)
+        if ship_row is None:
+            continue
+        enrichment_row = get_enrichment(conn, mmsi)
+
+        last_departed_iso = None
+        if (
+            event_row["event_type"] == EventType.ARRIVED
+            and (ship_row["visit_count"] or 0) > 1
+        ):
+            for v in get_visit_history(conn, mmsi):
+                if v["departed_at"] is not None:
+                    last_departed_iso = v["departed_at"]
+                    break
+
+        text = format_ticker_message(event_row, ship_row, enrichment_row, last_departed_iso)
+        if text is None:
+            continue
+        entries.append((text, (mmsi,), (event_row["id"],)))
+    return entries
+
+
 def build_idle_chunks(conn: sqlite3.Connection) -> list[str]:
     """Return 'No ships in range' followed by shuffled active quips and location facts."""
     rows = get_active_quips(conn)
@@ -197,45 +238,49 @@ def build_idle_chunks(conn: sqlite3.Connection) -> list[str]:
 
 def build_playlist(
     conn: sqlite3.Connection, cfg: Config
-) -> list[tuple[str, tuple[int, ...]]]:
+) -> list[tuple[str, tuple[int, ...], tuple[int, ...]]]:
     """Return the full scroll playlist for one cycle.
 
-    Each entry is ``(text, mmsi_tuple)``.  ``mmsi_tuple`` carries the MMSI(s)
-    whose ``ticker_shown_at`` the caller should update after scrolling.
-    Idle entries have an empty MMSI tuple.
+    Each entry is ``(text, mmsi_tuple, event_id_tuple)``.
+
+    - ``mmsi_tuple``: MMSIs whose ``ticker_shown_at`` to update after scrolling.
+    - ``event_id_tuple``: event IDs to mark as displayed after scrolling.
 
     Ordering:
-    - Moving ships sorted by ``ticker_shown_at`` ASC NULLS FIRST (never-shown
-      ships appear before recently-shown ones), with distance as tiebreaker.
-    - Stationary ships (anchored / moored / speed < 0.5 kn) are collapsed into
-      a single ``"At anchor: Name1, Name2, …"`` entry at the end, tagged with
-      all their MMSIs so they are marked shown as a group.
+    1. Pending events (ARRIVED, DEPARTED, STATUS_CHANGE) — newest last, capped at 5.
+    2. Moving ships sorted by ``ticker_shown_at`` NULLS FIRST then distance.
+    3. Stationary ships collapsed into a single ``"At anchor: …"`` entry.
+
+    Falls back to idle quips only when both events and in-range ships are absent.
     """
+    event_entries = _pending_event_entries(conn)
     ships_data = get_in_range_ships_with_distance(conn, cfg)
-    if not ships_data:
-        return [(text, ()) for text in build_idle_chunks(conn)]
 
-    mode = "compact" if cfg.compact else "verbose"
+    if not event_entries and not ships_data:
+        return [(text, (), ()) for text in build_idle_chunks(conn)]
 
-    moving = [entry for entry in ships_data if not _is_stationary(entry[0])]
-    stationary = [entry for entry in ships_data if _is_stationary(entry[0])]
+    playlist: list[tuple[str, tuple[int, ...], tuple[int, ...]]] = list(event_entries)
 
-    # Sort moving ships: never-shown first, then least-recently-shown, then closest
-    moving.sort(key=lambda x: (
-        x[0]["ticker_shown_at"] is not None,
-        x[0]["ticker_shown_at"] or "",
-        x[2],
-    ))
+    if ships_data:
+        mode = "compact" if cfg.compact else "verbose"
 
-    playlist: list[tuple[str, tuple[int, ...]]] = []
-    for ship_row, enrichment_row, distance_km, bearing_label in moving:
-        facts = _extract_facts(ship_row, enrichment_row, distance_km, bearing_label)
-        for chunk in format_ship_display(facts, mode=mode):
-            playlist.append((chunk, (ship_row["mmsi"],)))
+        moving = [entry for entry in ships_data if not _is_stationary(entry[0])]
+        stationary = [entry for entry in ships_data if _is_stationary(entry[0])]
 
-    if stationary:
-        names = [_display_name(s, e) for s, e, _, _ in stationary]
-        mmsis = tuple(s["mmsi"] for s, _, _, _ in stationary)
-        playlist.append(("At anchor: " + ", ".join(names), mmsis))
+        moving.sort(key=lambda x: (
+            x[0]["ticker_shown_at"] is not None,
+            x[0]["ticker_shown_at"] or "",
+            x[2],
+        ))
+
+        for ship_row, enrichment_row, distance_km, bearing_label in moving:
+            facts = _extract_facts(ship_row, enrichment_row, distance_km, bearing_label)
+            for chunk in format_ship_display(facts, mode=mode):
+                playlist.append((chunk, (ship_row["mmsi"],), ()))
+
+        if stationary:
+            names = [_display_name(s, e) for s, e, _, _ in stationary]
+            mmsis = tuple(s["mmsi"] for s, _, _, _ in stationary)
+            playlist.append(("At anchor: " + ", ".join(names), mmsis, ()))
 
     return playlist

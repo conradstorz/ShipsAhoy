@@ -33,8 +33,8 @@ def test_main_calls_scroll_text_for_each_chunk():
     """main() calls driver.scroll_text once per playlist chunk, then stops."""
     driver = mock.MagicMock()
     playlist = [
-        ("MV Test is a cargo vessel flying the US flag", (123456789,)),
-        ("MV Test is traveling at 8.5 knots heading west", (123456789,)),
+        ("MV Test is a cargo vessel flying the US flag", (123456789,), ()),
+        ("MV Test is traveling at 8.5 knots heading west", (123456789,), ()),
     ]
     scroll_calls = []
 
@@ -48,13 +48,15 @@ def test_main_calls_scroll_text_for_each_chunk():
     with mock.patch("sys.argv", ["ticker_service"]):
         with mock.patch.object(_ts_mod, "init_db", return_value=mock.MagicMock()):
             with mock.patch.object(_ts_mod, "Config", return_value=mock.MagicMock()):
-                with mock.patch.object(_ts_mod, "build_playlist", return_value=playlist):
-                    with mock.patch.object(_ts_mod, "mark_ship_shown", return_value=None):
-                        with mock.patch.object(_ts_mod, "_DriverClass", return_value=driver):
-                            with pytest.raises(SystemExit) as exc:
-                                _ts_mod.main()
+                with mock.patch.object(_ts_mod, "get_pending_events", return_value=[]):
+                    with mock.patch.object(_ts_mod, "build_playlist", return_value=playlist):
+                        with mock.patch.object(_ts_mod, "mark_ship_shown", return_value=None):
+                            with mock.patch.object(_ts_mod, "mark_event_displayed", return_value=None):
+                                with mock.patch.object(_ts_mod, "_DriverClass", return_value=driver):
+                                    with pytest.raises(SystemExit) as exc:
+                                        _ts_mod.main()
 
-    assert scroll_calls == [text for text, _ in playlist]
+    assert scroll_calls == [text for text, _, _ in playlist]
     assert exc.value.code == 0
 
 
@@ -66,11 +68,13 @@ def test_main_clears_display_on_keyboard_interrupt():
     with mock.patch("sys.argv", ["ticker_service"]):
         with mock.patch.object(_ts_mod, "init_db", return_value=mock.MagicMock()):
             with mock.patch.object(_ts_mod, "Config", return_value=mock.MagicMock()):
-                with mock.patch.object(_ts_mod, "build_playlist", return_value=[("chunk", ())]):
-                    with mock.patch.object(_ts_mod, "mark_ship_shown", return_value=None):
-                        with mock.patch.object(_ts_mod, "_DriverClass", return_value=driver):
-                            with pytest.raises(SystemExit) as exc:
-                                _ts_mod.main()
+                with mock.patch.object(_ts_mod, "get_pending_events", return_value=[]):
+                    with mock.patch.object(_ts_mod, "build_playlist", return_value=[("chunk", (), ())]):
+                        with mock.patch.object(_ts_mod, "mark_ship_shown", return_value=None):
+                            with mock.patch.object(_ts_mod, "mark_event_displayed", return_value=None):
+                                with mock.patch.object(_ts_mod, "_DriverClass", return_value=driver):
+                                    with pytest.raises(SystemExit) as exc:
+                                        _ts_mod.main()
 
     driver.clear.assert_called_once()
     assert exc.value.code == 0

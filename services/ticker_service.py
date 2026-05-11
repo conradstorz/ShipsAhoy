@@ -21,11 +21,18 @@ Usage::
 import argparse
 import sys
 import time
+from datetime import datetime, timedelta
 
 from loguru import logger
 
 from ships_ahoy.config import Config
-from ships_ahoy.db import init_db, mark_ship_shown
+from ships_ahoy.db import (
+    init_db,
+    mark_ship_shown,
+    mark_event_displayed,
+    get_pending_events,
+    batch_mark_events_displayed,
+)
 from ships_ahoy.ticker_content import build_playlist
 from ships_ahoy.service_utils import DEFAULT_DB_PATH, configure_logging
 
@@ -69,15 +76,28 @@ def main() -> None:
     try:
         while True:
             try:
+                # Flush stale events when the queue backed up while paused
+                pending = get_pending_events(conn)
+                if len(pending) > 10:
+                    try:
+                        oldest_dt = datetime.fromisoformat(pending[0]["created_at"])
+                        if datetime.now() - oldest_dt > timedelta(minutes=5):
+                            batch_mark_events_displayed(conn, [e["id"] for e in pending])
+                            logger.warning("Flushed {} stale queued events", len(pending))
+                    except (ValueError, TypeError):
+                        pass
+
                 playlist = build_playlist(conn, cfg)
                 seen_mmsis: set[int] = set()
-                for text, mmsis in playlist:
+                for text, mmsis, event_ids in playlist:
                     logger.info("Ticker: {}", text)
                     driver.scroll_text(text, speed_px_per_sec=cfg.scroll_speed)
                     for mmsi in mmsis:
                         if mmsi not in seen_mmsis:
                             mark_ship_shown(conn, mmsi)
                             seen_mmsis.add(mmsi)
+                    for event_id in event_ids:
+                        mark_event_displayed(conn, event_id)
                     time.sleep(cfg.gap_sec)
             except Exception:
                 logger.exception("Ticker service loop error")
