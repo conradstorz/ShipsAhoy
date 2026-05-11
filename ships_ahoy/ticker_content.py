@@ -20,6 +20,7 @@ from typing import Optional
 from ships_ahoy.config import Config
 from ships_ahoy.db import get_active_quips, get_enrichment, get_ships_in_range
 from ships_ahoy.distance import bearing_to_cardinal, distance_info
+from ships_ahoy.destination import resolve_destination
 from ships_ahoy.message_builder import format_ship_display
 
 _STATUS_LABELS: dict[int, str] = {
@@ -96,11 +97,12 @@ def _extract_facts(
     )
 
     dest = ship_row["destination"]
-    destination = (
-        dest.strip().title()
-        if dest and dest.strip() and dest.strip() != "0"
-        else None
-    )
+    destination = None
+    if dest and dest.strip() and dest.strip() != "0":
+        raw_dest = dest.strip()
+        lat = ship_row["latitude"]
+        lon = ship_row["longitude"]
+        destination = resolve_destination(raw_dest, lat=lat, lon=lon) or raw_dest.title()
 
     length = enrichment_row["length_m"] if enrichment_row else None
     build_year = enrichment_row["build_year"] if enrichment_row else None
