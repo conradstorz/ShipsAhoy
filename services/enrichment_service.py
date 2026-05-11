@@ -28,6 +28,7 @@ Usage::
 
 import argparse
 import os
+import signal
 import sqlite3
 import sys
 import time
@@ -73,8 +74,8 @@ _SERVICE_SCRIPTS = {
 }
 
 
-def _find_competing_services() -> list[str]:
-    """Return a list of ShipsAhoy service command-lines running in other processes."""
+def _find_competing_services() -> list[tuple[int, str]]:
+    """Return list of (pid, cmdline) for ShipsAhoy service processes other than self."""
     my_pid = os.getpid()
     competing = []
     try:
@@ -87,10 +88,54 @@ def _find_competing_services() -> list[str]:
             except OSError:
                 continue
             if any(svc in cmdline for svc in _SERVICE_SCRIPTS):
-                competing.append(cmdline)
+                competing.append((int(entry.name), cmdline))
     except OSError:
         pass
     return competing
+
+
+def _stop_competing_services() -> bool:
+    """Send SIGTERM to all competing ShipsAhoy processes and wait for them to exit.
+
+    Returns True if all processes exited within the timeout, False otherwise.
+    """
+    competing = _find_competing_services()
+    if not competing:
+        return True
+
+    logger.info("Stopping {} competing ShipsAhoy service(s)...", len(competing))
+    # Try systemctl first so the supervisor doesn't restart services mid-reset
+    os.system("systemctl stop ships-ahoy.target 2>/dev/null")
+    pids = []
+    for pid, cmd in competing:
+        # Extract the script name for readable logging
+        script = next((p for p in cmd.split() if p.endswith(".py")), cmd)
+        try:
+            os.kill(pid, signal.SIGTERM)
+            logger.info("  Sent SIGTERM to PID {} — {}", pid, Path(script).name)
+            pids.append(pid)
+        except ProcessLookupError:
+            pass  # already gone
+        except PermissionError:
+            logger.error("  Cannot stop PID {} (permission denied): {}", pid, cmd)
+            return False
+
+    # Wait up to 10 seconds for all to exit
+    deadline = time.monotonic() + 10
+    remaining = list(pids)
+    while remaining and time.monotonic() < deadline:
+        time.sleep(0.25)
+        remaining = [p for p in remaining if Path(f"/proc/{p}").exists()]
+
+    if remaining:
+        logger.error(
+            "{} process(es) did not exit within 10 seconds: {}",
+            len(remaining), remaining,
+        )
+        return False
+
+    logger.info("All competing services stopped.")
+    return True
 
 
 def _check_db_writable(conn) -> bool:
@@ -382,18 +427,11 @@ def main() -> None:
     photos_dir.mkdir(parents=True, exist_ok=True)
 
     if args.reset_enrichment:
-        competing = _find_competing_services()
-        if competing:
+        if not _stop_competing_services():
             logger.error(
-                "--reset-enrichment requires exclusive database access, but {} "
-                "ShipsAhoy service(s) are still running:",
-                len(competing),
-            )
-            for cmd in competing:
-                logger.error("  {}", cmd)
-            logger.error(
-                "Run: sudo systemctl stop ships-ahoy.target  "
-                "(then kill any remaining processes)"
+                "Could not stop all competing services. "
+                "Run: sudo systemctl stop ships-ahoy.target "
+                "and kill any remaining processes, then retry."
             )
             sys.exit(1)
 
