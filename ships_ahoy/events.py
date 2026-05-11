@@ -97,7 +97,7 @@ def detect_events(
     ):
         old_label = _STATUS_LABELS.get(old_ship.status, str(old_ship.status))
         new_label = _STATUS_LABELS.get(new_ship.status, str(new_ship.status))
-        detail = f"{new_ship.name} status: {old_label} → {new_label}"
+        detail = f"{new_ship.name or new_ship.mmsi} status: {old_label} → {new_label}"
         events.append((EventType.STATUS_CHANGE, detail))
 
     return events

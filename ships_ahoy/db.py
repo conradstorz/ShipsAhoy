@@ -202,7 +202,7 @@ def upsert_ship(conn: sqlite3.Connection, ship: ShipInfo) -> None:
                            first_seen, last_seen)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(mmsi) DO UPDATE SET
-            name        = excluded.name,
+            name        = COALESCE(excluded.name, ships.name),
             ship_type   = excluded.ship_type,
             flag        = excluded.flag,
             latitude    = excluded.latitude,

@@ -122,14 +122,15 @@ def _process_message(conn, msg, cfg: Config) -> None:
 
     if old_row is None:
         # First time we've seen this ship
-        write_event(conn, new_ship.mmsi, EventType.ARRIVED, f"{new_ship.name} arrived")
+        label = new_ship.name or str(new_ship.mmsi)
+        write_event(conn, new_ship.mmsi, EventType.ARRIVED, f"{label} arrived")
         record_visit(conn, new_ship.mmsi)
-        logger.info("ARRIVED: {} (MMSI {})", new_ship.name, new_ship.mmsi)
+        logger.info("ARRIVED: {} (MMSI {})", label, new_ship.mmsi)
     else:
         # Compare against previous state
         old_ship = ShipInfo(
             mmsi=old_row["mmsi"],
-            name=old_row["name"] or "Unknown",
+            name=old_row["name"],
             status=old_row["status"],
         )
         for event_type, detail in detect_events(old_ship, new_ship):

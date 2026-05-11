@@ -43,7 +43,7 @@ class TestShipInfo:
 
     def test_default_name(self):
         ship = ShipInfo(mmsi=123456789)
-        assert ship.name == "Unknown"
+        assert ship.name is None
 
     def test_last_seen_set_on_creation(self):
         before = datetime.now()

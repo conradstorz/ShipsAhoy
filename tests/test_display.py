@@ -68,7 +68,7 @@ class TestFormatShip:
 
     def test_shows_default_name(self):
         ship = ShipInfo(mmsi=123456789)
-        assert "Unknown" in format_ship(ship)
+        assert "—" in format_ship(ship)
 
     def test_shows_custom_name(self):
         ship = ShipInfo(mmsi=123456789, name="ENTERPRISE")

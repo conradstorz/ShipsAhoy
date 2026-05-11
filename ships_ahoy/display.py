@@ -62,7 +62,7 @@ def format_ship(ship: ShipInfo) -> str:
     """Format a single ship's data as a multi-line string."""
     lines = [
         f"MMSI : {ship.mmsi}",
-        f"  Name    : {ship.name}",
+        f"  Name    : {ship.name or '—'}",
     ]
     if ship.position is not None:
         lines.append(f"  Position: {ship.latitude:.5f}° N  {ship.longitude:.5f}° E")

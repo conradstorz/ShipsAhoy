@@ -89,7 +89,7 @@ class ShipInfo:
     """
 
     mmsi: int
-    name: str = "Unknown"
+    name: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     speed: Optional[float] = None       # knots over ground
