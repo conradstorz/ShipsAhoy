@@ -20,6 +20,7 @@ Usage::
 
 import random
 import sqlite3
+from datetime import datetime, timezone
 from typing import Optional
 
 from ships_ahoy.config import Config
@@ -51,6 +52,12 @@ _STATUS_LABELS: dict[int, str] = {
 
 # Status codes worth announcing (excludes 0=underway and 8=underway sailing)
 _NOTEWORTHY_STATUSES: frozenset[int] = frozenset({1, 2, 3, 4, 5, 6, 7})
+
+# Seconds to wait before displaying an ARRIVED event for an unnamed ship.
+# Gives type-5 static messages (sent every ~6 min) time to arrive with the
+# ship's name.  Returning ships already have a name in the DB via COALESCE
+# so they are never deferred.
+_NAME_WAIT_SECS: int = 300
 
 _CARDINAL_WORDS: dict[str, str] = {
     "N": "north", "NNE": "north-northeast", "NE": "northeast",
@@ -213,6 +220,26 @@ def _pending_event_entries(
         if ship_row is None:
             continue
         enrichment_row = get_enrichment(conn, mmsi)
+
+        # Defer ARRIVED events for unnamed ships — give type-5 messages time
+        # to arrive.  Returning ships already have a stored name so they pass
+        # this check immediately.
+        if event_row["event_type"] == EventType.ARRIVED:
+            enrich_name = enrichment_row["vessel_name"] if enrichment_row else None
+            ais_name = ship_row["name"]
+            if ais_name and (ais_name.strip() == "Unknown" or ais_name.strip().isdigit()):
+                ais_name = None
+            has_name = bool(enrich_name or ais_name)
+            if not has_name:
+                try:
+                    created_dt = datetime.fromisoformat(event_row["created_at"])
+                    if created_dt.tzinfo is None:
+                        created_dt = created_dt.replace(tzinfo=timezone.utc)
+                    age = (datetime.now(timezone.utc) - created_dt).total_seconds()
+                    if age < _NAME_WAIT_SECS:
+                        continue
+                except (ValueError, TypeError):
+                    pass
 
         last_departed_iso = None
         if (

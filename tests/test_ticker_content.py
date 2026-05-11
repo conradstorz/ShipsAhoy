@@ -307,3 +307,49 @@ def test_build_playlist_shows_events_when_no_ships_in_range(conn):
     # Should not fall back to idle — should contain the DEPARTED event
     assert playlist[0][0] != "No ships in range"
     assert any("departed" in text.lower() for text, _, _ in playlist)
+
+
+def test_arrived_event_unnamed_ship_deferred_when_recent(conn):
+    """ARRIVED event for an unnamed brand-new ship is not shown until 5 min have passed."""
+    from ships_ahoy.db import write_event
+    from ships_ahoy.events import EventType
+    _make_ship(conn, mmsi=200000030, name=None, latitude=51.5, longitude=0.1,
+               speed=5.0, visit_count=1)
+    write_event(conn, 200000030, EventType.ARRIVED, "200000030 arrived")
+    # created_at is effectively now — should be deferred
+    cfg = Config(conn)
+    playlist = build_playlist(conn, cfg)
+    event_entries = [ev for _, _, ev in playlist if ev]
+    assert not event_entries, "unnamed recent ARRIVED should be deferred, not shown"
+
+
+def test_arrived_event_unnamed_ship_shown_after_timeout(conn):
+    """ARRIVED event for an unnamed ship older than 5 min is shown as unidentified."""
+    import datetime as _dt
+    from ships_ahoy.db import write_event
+    from ships_ahoy.events import EventType
+    _make_ship(conn, mmsi=200000031, name=None, latitude=51.5, longitude=0.1,
+               speed=5.0, visit_count=1)
+    write_event(conn, 200000031, EventType.ARRIVED, "200000031 arrived")
+    old_ts = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(minutes=10)).isoformat()
+    conn.execute("UPDATE events SET created_at=? WHERE mmsi=200000031", (old_ts,))
+    conn.commit()
+    cfg = Config(conn)
+    playlist = build_playlist(conn, cfg)
+    event_entries = [(text, ev) for text, _, ev in playlist if ev]
+    assert event_entries, "unnamed stale ARRIVED should be shown after timeout"
+    assert any("unidentified" in text for text, _ in event_entries)
+
+
+def test_arrived_event_named_ship_shown_immediately(conn):
+    """ARRIVED event for a named ship is shown immediately without any deferral."""
+    from ships_ahoy.db import write_event
+    from ships_ahoy.events import EventType
+    _make_ship(conn, mmsi=200000032, name="MV Known", latitude=51.5, longitude=0.1,
+               speed=5.0, visit_count=1)
+    write_event(conn, 200000032, EventType.ARRIVED, "MV Known arrived")
+    cfg = Config(conn)
+    playlist = build_playlist(conn, cfg)
+    event_entries = [(text, ev) for text, _, ev in playlist if ev]
+    assert event_entries, "named ARRIVED should be shown immediately"
+    assert any("MV Known" in text for text, _ in event_entries)
