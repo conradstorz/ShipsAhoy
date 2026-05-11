@@ -87,6 +87,15 @@ def main() -> None:
                         pass
 
                 playlist = build_playlist(conn, cfg)
+                event_count = sum(1 for _, _, ev in playlist if ev)
+                ship_count = len({m for _, ms, ev in playlist for m in ms if not ev})
+                logger.debug(
+                    "Playlist: {} entries ({} event(s), {} ship(s))",
+                    len(playlist), event_count, ship_count,
+                )
+                if not playlist or (len(playlist) == 1 and not playlist[0][1]):
+                    logger.debug("Playlist: idle (no ships in range)")
+
                 seen_mmsis: set[int] = set()
                 displayed_event_ids: list[int] = []
                 for text, mmsis, event_ids in playlist:
@@ -99,6 +108,7 @@ def main() -> None:
                     displayed_event_ids.extend(event_ids)
                     time.sleep(cfg.gap_sec)
                 if displayed_event_ids:
+                    logger.debug("Marking {} event(s) as displayed", len(displayed_event_ids))
                     batch_mark_events_displayed(conn, displayed_event_ids)
             except Exception:
                 logger.exception("Ticker service loop error")

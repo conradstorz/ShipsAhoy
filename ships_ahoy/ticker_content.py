@@ -23,6 +23,8 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Optional
 
+from loguru import logger
+
 from ships_ahoy.config import Config
 from ships_ahoy.db import (
     get_active_quips,
@@ -237,7 +239,16 @@ def _pending_event_entries(
                         created_dt = created_dt.replace(tzinfo=timezone.utc)
                     age = (datetime.now(timezone.utc) - created_dt).total_seconds()
                     if age < _NAME_WAIT_SECS:
+                        remaining = int(_NAME_WAIT_SECS - age)
+                        logger.debug(
+                            "MMSI {} ARRIVED deferred — no name yet, {}s remaining in wait window",
+                            mmsi, remaining,
+                        )
                         continue
+                    logger.debug(
+                        "MMSI {} ARRIVED — name wait expired ({:.0f}s old), showing as unidentified",
+                        mmsi, age,
+                    )
                 except (ValueError, TypeError):
                     pass
 

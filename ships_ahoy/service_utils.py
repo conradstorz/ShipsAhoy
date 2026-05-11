@@ -3,6 +3,12 @@
 Provides a single source of truth for the default database path,
 the runtime log file path, and the logging configuration used by all
 four services.
+
+Log files
+---------
+logs/runtime.log  — INFO+, human-readable, read by the web dashboard
+logs/info.log     — INFO+, clean prose format, 30-day retention
+logs/debug.log    — DEBUG+, full module/function/line context, 24-hour retention
 """
 
 import logging
@@ -13,10 +19,19 @@ from loguru import logger
 
 DEFAULT_DB_PATH = "ships.db"
 
-# Runtime log written by all services; read by the web dashboard.
-LOG_FILE = Path(__file__).resolve().parent.parent / "logs" / "runtime.log"
+_LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
 
-_LOG_FORMAT = "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name} — {message}"
+# Runtime log written by all services; read by the web dashboard.
+LOG_FILE = _LOG_DIR / "runtime.log"
+
+# Pretty format for info-level logs (no noise, easy to read).
+_INFO_FORMAT = "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}"
+
+# Verbose format for debug-level logs (full source context).
+_DEBUG_FORMAT = (
+    "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | "
+    "{name}:{function}:{line} | {message}"
+)
 
 
 class _InterceptHandler(logging.Handler):
@@ -39,13 +54,20 @@ class _InterceptHandler(logging.Handler):
 
 
 def configure_logging(verbose: bool) -> None:
-    """Configure loguru as the sole logging sink, intercepting stdlib logging."""
-    level = "DEBUG" if verbose else "INFO"
-    LOG_FILE.parent.mkdir(exist_ok=True)
+    """Configure loguru sinks:
+
+    - stderr: colorised, DEBUG if --verbose else INFO
+    - logs/runtime.log: INFO+, for the web dashboard (10 MB rotation, 3 files)
+    - logs/info.log: INFO+, pretty, 30-day retention
+    - logs/debug.log: DEBUG+, full context, 24-hour retention
+    """
+    _LOG_DIR.mkdir(exist_ok=True)
     logger.remove()
+
+    # Stderr — respects --verbose
     logger.add(
         sys.stderr,
-        level=level,
+        level="DEBUG" if verbose else "INFO",
         colorize=True,
         format=(
             "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
@@ -54,12 +76,35 @@ def configure_logging(verbose: bool) -> None:
             "<level>{message}</level>"
         ),
     )
+
+    # Dashboard log (unchanged path so web_service keeps working)
     logger.add(
         LOG_FILE,
-        level=level,
+        level="INFO",
         rotation="10 MB",
         retention=3,
         encoding="utf-8",
-        format=_LOG_FORMAT,
+        format=_INFO_FORMAT,
     )
+
+    # Pretty info log — long retention for post-mortems
+    logger.add(
+        _LOG_DIR / "info.log",
+        level="INFO",
+        rotation="1 day",
+        retention="30 days",
+        encoding="utf-8",
+        format=_INFO_FORMAT,
+    )
+
+    # Detailed debug log — short retention, auto-cleaned
+    logger.add(
+        _LOG_DIR / "debug.log",
+        level="DEBUG",
+        rotation="100 MB",
+        retention="1 day",
+        encoding="utf-8",
+        format=_DEBUG_FORMAT,
+    )
+
     logging.basicConfig(handlers=[_InterceptHandler()], level=0, force=True)

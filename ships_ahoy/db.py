@@ -228,6 +228,14 @@ def upsert_ship(conn: sqlite3.Connection, ship: ShipInfo) -> None:
         ),
     )
     conn.commit()
+    logger.debug(
+        "Upsert MMSI {} | name={!r} | pos=({}, {}) | spd={} | status={}",
+        ship.mmsi, ship.name,
+        f"{ship.latitude:.4f}" if ship.latitude is not None else "—",
+        f"{ship.longitude:.4f}" if ship.longitude is not None else "—",
+        f"{ship.speed:.1f}kn" if ship.speed is not None else "—",
+        ship.status,
+    )
 
 
 def get_ship(conn: sqlite3.Connection, mmsi: int) -> Optional[sqlite3.Row]:
@@ -331,6 +339,7 @@ def write_event(
     """Append a new event row with created_at=now() and displayed_at=NULL."""
     _write_event_sql(conn, mmsi, event_type, detail)
     conn.commit()
+    logger.debug("Event written: MMSI {} | {} | {}", mmsi, event_type, detail)
 
 
 def get_pending_events(conn: sqlite3.Connection) -> list[sqlite3.Row]:
@@ -408,6 +417,7 @@ def record_visit(conn: sqlite3.Connection, mmsi: int) -> None:
         "UPDATE ships SET visit_count = visit_count + 1 WHERE mmsi=?", (mmsi,)
     )
     conn.commit()
+    logger.debug("Visit recorded: MMSI {}", mmsi)
 
 
 def _close_visit_sql(conn: sqlite3.Connection, mmsi: int) -> None:

@@ -83,12 +83,18 @@ def _connect_with_backoff(host: str, port: int, use_udp: bool) -> AISReceiver:
 def _run_stale_sweep(conn, cfg: Config) -> None:
     """Query for ships past stale_ship_hours that still have an open visit, and mark each departed."""
     threshold = (datetime.now(timezone.utc) - timedelta(hours=cfg.stale_ship_hours)).isoformat()
-    for mmsi in get_stale_mmsis(conn, threshold):
+    stale = get_stale_mmsis(conn, threshold)
+    logger.debug("Stale sweep: threshold={} found {} stale ship(s)", threshold[:19], len(stale))
+    departed = 0
+    for mmsi in stale:
         try:
             mark_ship_departed(conn, mmsi)
             logger.info("Stale sweep: marked MMSI {} as departed", mmsi)
+            departed += 1
         except Exception:
             logger.exception("Stale sweep: error marking MMSI {} as departed", mmsi)
+    if departed:
+        logger.info("Stale sweep complete: {} ship(s) marked departed", departed)
 
 
 def _process_message(conn, msg, cfg: Config) -> None:
@@ -112,6 +118,10 @@ def _process_message(conn, msg, cfg: Config) -> None:
         close_enough = is_noteworthy(
             new_ship.latitude, new_ship.longitude, home[0], home[1], cfg.distance_km
         )
+        if not close_enough:
+            logger.debug(
+                "MMSI {} out of range ({:.1f} km radius) — no event", new_ship.mmsi, cfg.distance_km
+            )
     elif home is None:
         global _home_unset_warned
         if not _home_unset_warned:
@@ -120,6 +130,7 @@ def _process_message(conn, msg, cfg: Config) -> None:
         close_enough = (new_ship.latitude is not None and new_ship.longitude is not None)
     else:
         close_enough = False  # ship has no position yet
+        logger.debug("MMSI {} has no position yet — skipping event check", new_ship.mmsi)
 
     if not close_enough:
         return
@@ -138,7 +149,11 @@ def _process_message(conn, msg, cfg: Config) -> None:
             name=old_row["name"],
             status=old_row["status"],
         )
-        for event_type, detail in detect_events(old_ship, new_ship):
+        events = detect_events(old_ship, new_ship)
+        if events:
+            logger.debug("MMSI {} triggered {} event(s): {}", new_ship.mmsi, len(events),
+                         ", ".join(et for et, _ in events))
+        for event_type, detail in events:
             write_event(conn, new_ship.mmsi, event_type, detail)
         # Re-arrival: ship is in DB but has no open visit (departed since last seen,
         # either by the stale sweep or because the first upsert had no position).

@@ -30,6 +30,8 @@ DEFAULT_HOST = "localhost"
 DEFAULT_TCP_PORT = 10110
 DEFAULT_UDP_PORT = 10110
 
+_MSG_LOG_INTERVAL = 100  # log message throughput every N messages
+
 
 class AISReceiver:
     """Receive and decode AIS messages from an SDR source over TCP or UDP.
@@ -75,10 +77,23 @@ class AISReceiver:
             logger.info("Connecting to AIS TCP source at {}:{}", self.host, self.port)
             connection = TCPConnection(self.host, self.port)
 
+        msg_count = 0
+        decode_errors = 0
         with connection as stream:
             for nmea_msg in stream:
                 try:
                     decoded = nmea_msg.decode()
+                    msg_count += 1
+                    if msg_count % _MSG_LOG_INTERVAL == 0:
+                        logger.debug(
+                            "AIS stream: {} messages received ({} decode errors)",
+                            msg_count, decode_errors,
+                        )
                     yield decoded
                 except Exception as exc:
+                    decode_errors += 1
                     logger.debug("Could not decode AIS message: {}", exc)
+        logger.info(
+            "AIS stream ended after {} messages ({} decode errors)",
+            msg_count, decode_errors,
+        )

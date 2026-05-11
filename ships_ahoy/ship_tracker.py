@@ -187,7 +187,12 @@ class ShipTracker:
         status = getattr(msg, "status", None)
         if status is not None:
             try:
-                ship.status = int(status)
+                new_status = int(status)
+                if ship.status != new_status:
+                    logger.debug(
+                        "MMSI {} status: {} -> {}", mmsi, ship.status, new_status
+                    )
+                ship.status = new_status
             except (TypeError, ValueError):
                 pass
 
@@ -196,6 +201,10 @@ class ShipTracker:
         if shipname:
             name = str(shipname).strip().strip("@").strip()
             if name:
+                if ship.name != name:
+                    logger.debug(
+                        "MMSI {} name: {!r} -> {!r}", mmsi, ship.name, name
+                    )
                 ship.name = name
 
         # msg type 21 uses "name" instead of "shipname"
@@ -203,6 +212,10 @@ class ShipTracker:
         if name_field:
             name = str(name_field).strip().strip("@").strip()
             if name:
+                if ship.name != name:
+                    logger.debug(
+                        "MMSI {} name (type-21): {!r} -> {!r}", mmsi, ship.name, name
+                    )
                 ship.name = name
 
         ship_type = getattr(msg, "ship_type", None)

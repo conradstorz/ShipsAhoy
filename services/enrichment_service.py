@@ -212,6 +212,8 @@ def _scrape_shipxplorer(mmsi: int) -> Optional[dict]:
     """
     url = f"https://www.shipxplorer.com/vessel/{mmsi}"
     resp = requests.get(url, timeout=_TIMEOUT, headers=_HEADERS)
+    logger.debug("ShipXplorer HTTP {} for MMSI {} ({}ms)", resp.status_code, mmsi,
+                 int(resp.elapsed.total_seconds() * 1000))
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -264,10 +266,13 @@ def _scrape_marinetraffic(mmsi: int) -> Optional[dict]:
     """
     url = f"https://www.marinetraffic.com/en/ais/details/ships/mmsi:{mmsi}"
     resp = requests.get(url, timeout=_TIMEOUT, headers=_HEADERS)
+    logger.debug("MarineTraffic HTTP {} for MMSI {} ({}ms)", resp.status_code, mmsi,
+                 int(resp.elapsed.total_seconds() * 1000))
     resp.raise_for_status()  # raises on 4xx/5xx including 403
 
     # raise_for_status() won't catch Cloudflare challenge pages (200 with JS wall)
     if "cloudflare" in resp.text.lower():
+        logger.debug("MarineTraffic: Cloudflare challenge for MMSI {}", mmsi)
         return None
 
     soup = BeautifulSoup(resp.text, "html.parser")
@@ -305,6 +310,8 @@ def _scrape_myshiptracking(mmsi: int) -> Optional[dict]:
     """
     url = f"https://www.myshiptracking.com/vessels/{mmsi}"
     resp = requests.get(url, timeout=_TIMEOUT, headers=_HEADERS)
+    logger.debug("MyShipTracking HTTP {} for MMSI {} ({}ms)", resp.status_code, mmsi,
+                 int(resp.elapsed.total_seconds() * 1000))
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -368,6 +375,8 @@ def _scrape_itu(mmsi: int) -> Optional[dict]:
         timeout=_TIMEOUT,
         headers=_HEADERS,
     )
+    logger.debug("ITU HTTP {} for MMSI {} ({}ms)", resp.status_code, mmsi,
+                 int(resp.elapsed.total_seconds() * 1000))
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
