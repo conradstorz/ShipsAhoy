@@ -27,6 +27,7 @@ Usage::
 """
 
 import argparse
+import sqlite3
 import sys
 import time
 from pathlib import Path
@@ -61,6 +62,24 @@ def _build_parser() -> argparse.ArgumentParser:
              "then run the service normally.",
     )
     return parser
+
+
+def _check_db_writable(conn) -> bool:
+    """Return True if a write lock can be acquired on the database within 2 seconds.
+
+    Logs an error and returns False if the database is locked by another process.
+    """
+    try:
+        conn.execute("PRAGMA busy_timeout = 2000")
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute("ROLLBACK")
+        return True
+    except sqlite3.OperationalError as exc:
+        logger.error(
+            "Database is locked or unavailable (another process may be holding a write lock): {}",
+            exc,
+        )
+        return False
 
 
 def _reset_enrichment(conn) -> None:
@@ -334,6 +353,14 @@ def main() -> None:
     photos_dir.mkdir(parents=True, exist_ok=True)
 
     conn = init_db(args.db)
+
+    if not _check_db_writable(conn):
+        logger.error(
+            "Cannot acquire database write lock. "
+            "Stop all other ShipsAhoy services before running with --reset-enrichment."
+        )
+        sys.exit(1)
+
     cfg = Config(conn)
 
     if args.reset_enrichment:
