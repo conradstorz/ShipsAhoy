@@ -130,7 +130,6 @@ def _process_message(conn, msg, cfg: Config) -> None:
         close_enough = (new_ship.latitude is not None and new_ship.longitude is not None)
     else:
         close_enough = False  # ship has no position yet
-        logger.debug("MMSI {} has no position yet — skipping event check", new_ship.mmsi)
 
     if not close_enough:
         return

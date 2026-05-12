@@ -79,21 +79,23 @@ class AISReceiver:
 
         msg_count = 0
         decode_errors = 0
-        with connection as stream:
-            for nmea_msg in stream:
-                try:
-                    decoded = nmea_msg.decode()
-                    msg_count += 1
-                    if msg_count % _MSG_LOG_INTERVAL == 0:
-                        logger.debug(
-                            "AIS stream: {} messages received ({} decode errors)",
-                            msg_count, decode_errors,
-                        )
-                    yield decoded
-                except Exception as exc:
-                    decode_errors += 1
-                    logger.debug("Could not decode AIS message: {}", exc)
-        logger.info(
-            "AIS stream ended after {} messages ({} decode errors)",
-            msg_count, decode_errors,
-        )
+        try:
+            with connection as stream:
+                for nmea_msg in stream:
+                    try:
+                        decoded = nmea_msg.decode()
+                        msg_count += 1
+                        if msg_count % _MSG_LOG_INTERVAL == 0:
+                            logger.debug(
+                                "AIS stream: {} messages received ({} decode errors)",
+                                msg_count, decode_errors,
+                            )
+                        yield decoded
+                    except Exception as exc:
+                        decode_errors += 1
+                        logger.debug("Could not decode AIS message: {}", exc)
+        finally:
+            logger.info(
+                "AIS stream ended after {} messages ({} decode errors)",
+                msg_count, decode_errors,
+            )

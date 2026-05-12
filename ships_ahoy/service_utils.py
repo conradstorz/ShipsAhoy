@@ -97,12 +97,14 @@ def configure_logging(verbose: bool) -> None:
         format=_INFO_FORMAT,
     )
 
-    # Detailed debug log — short retention, auto-cleaned
+    # Detailed debug log — short retention, auto-cleaned.
+    # rotation="1 day" + retention=1 means: one log file, replaced every 24 h.
+    # Using size-based rotation here would accumulate many files on busy deployments.
     logger.add(
         _LOG_DIR / "debug.log",
         level="DEBUG",
-        rotation="100 MB",
-        retention="1 day",
+        rotation="1 day",
+        retention=1,
         encoding="utf-8",
         format=_DEBUG_FORMAT,
     )

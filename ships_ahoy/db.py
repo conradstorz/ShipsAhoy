@@ -228,14 +228,6 @@ def upsert_ship(conn: sqlite3.Connection, ship: ShipInfo) -> None:
         ),
     )
     conn.commit()
-    logger.debug(
-        "Upsert MMSI {} | name={!r} | pos=({}, {}) | spd={} | status={}",
-        ship.mmsi, ship.name,
-        f"{ship.latitude:.4f}" if ship.latitude is not None else "—",
-        f"{ship.longitude:.4f}" if ship.longitude is not None else "—",
-        f"{ship.speed:.1f}kn" if ship.speed is not None else "—",
-        ship.status,
-    )
 
 
 def get_ship(conn: sqlite3.Connection, mmsi: int) -> Optional[sqlite3.Row]:

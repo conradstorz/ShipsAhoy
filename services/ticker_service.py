@@ -93,7 +93,7 @@ def main() -> None:
                     "Playlist: {} entries ({} event(s), {} ship(s))",
                     len(playlist), event_count, ship_count,
                 )
-                if not playlist or (len(playlist) == 1 and not playlist[0][1]):
+                if event_count == 0 and ship_count == 0:
                     logger.debug("Playlist: idle (no ships in range)")
 
                 seen_mmsis: set[int] = set()
