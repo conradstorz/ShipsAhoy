@@ -74,7 +74,7 @@
       <strong>{% for city in nearby_cities %}{{ city.name }} ({{ city.distance_km }} km){% if not loop.last %}, {% endif %}{% endfor %}</strong>
     </div>
     {% endif %}
-    <div id="refresh-indicator">Refreshing in <span id="refresh-countdown">30</span>s</div>
+    <div id="refresh-indicator">Refreshing in <span id="refresh-countdown">300</span>s</div>
   </div>
 
   <p class="log-label">Runtime Log</p>
@@ -193,7 +193,7 @@
   </script>
   <script>
     (function () {
-      const INTERVAL = 30;
+      const INTERVAL = 300;
       const countdownEl = document.getElementById('refresh-countdown');
       let remaining = INTERVAL;
       const refreshTimer = setInterval(function () {
