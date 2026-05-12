@@ -108,6 +108,8 @@ def _display_name(ship_row: sqlite3.Row, enrichment_row: Optional[sqlite3.Row]) 
     Falls back to a type-based description — never exposes a bare MMSI.
     """
     enrich_name = enrichment_row["vessel_name"] if enrichment_row else None
+    if enrich_name and (enrich_name.strip() == "Unknown" or enrich_name.strip().isdigit()):
+        enrich_name = None
     ais_name = ship_row["name"]
     if ais_name and (ais_name.strip() == "Unknown" or ais_name.strip().isdigit()):
         ais_name = None
@@ -122,6 +124,9 @@ def _extract_facts(
 ) -> dict:
     """Convert DB rows into a plain facts dict for format_ship_display."""
     enrich_name = enrichment_row["vessel_name"] if enrichment_row else None
+    # Discard junk enrichment names: bare MMSI digits or "Unknown"
+    if enrich_name and (enrich_name.strip() == "Unknown" or enrich_name.strip().isdigit()):
+        enrich_name = None
     ais_name = ship_row["name"]
     # Discard junk AIS names: "Unknown" (pre-fix default) or bare MMSI digits
     if ais_name and (ais_name.strip() == "Unknown" or ais_name.strip().isdigit()):
