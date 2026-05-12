@@ -1,0 +1,30 @@
+[project]
+name = "ais-destination-resolver"
+version = "0.1.0"
+description = "Resolve messy AIS destination text to U.S. inland waterway destinations."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "rapidfuzz>=3.9.0",
+    "typer>=0.12.3",
+    "rich>=13.7.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2.0",
+]
+
+[project.scripts]
+ais-dest = "ais_destination_resolver.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
