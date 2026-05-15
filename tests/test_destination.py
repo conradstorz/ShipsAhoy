@@ -147,6 +147,8 @@ def test_plain_text_returns_canonical_name(mock_resolver):
     mock_resolver.resolve.return_value = match
 
     assert resolve_ais_destination("NOLA") == "New Orleans"
+    mock_resolver.resolve.assert_called_once_with("NOLA", latitude=None, longitude=None)
+    mock_resolver.resolve_route.assert_not_called()
 
 
 def test_resolver_unavailable_returns_none(monkeypatch):
@@ -158,3 +160,5 @@ def test_resolver_unavailable_returns_none(monkeypatch):
 def test_empty_input_returns_none(mock_resolver):
     """Empty string → None (no display)."""
     assert resolve_ais_destination("") is None
+    mock_resolver.resolve.assert_not_called()
+    mock_resolver.resolve_route.assert_not_called()
