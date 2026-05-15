@@ -162,3 +162,49 @@ def test_empty_input_returns_none(mock_resolver):
     assert resolve_ais_destination("") is None
     mock_resolver.resolve.assert_not_called()
     mock_resolver.resolve_route.assert_not_called()
+
+
+def test_trailing_separator_returns_none(mock_resolver):
+    """Destination field with trailing separator (e.g. 'BATON ROUGE>') → None."""
+    result = RouteResolution(
+        raw_destination="BATON ROUGE>",
+        normalized_destination="BATONROUGE>",
+        separator=">",
+        route_type="origin_to_destination",
+        endpoints=[
+            RouteEndpoint(
+                raw="BATONROUGE", normalized="BATONROUGE", endpoint_type="text",
+                guid_location=None, destination=None, confidence=0.0,
+            ),
+            RouteEndpoint(
+                raw="", normalized="", endpoint_type="empty",
+                guid_location=None, destination=None, confidence=0.0,
+            ),
+        ],
+        confidence=0.0,
+    )
+    mock_resolver.resolve_route.return_value = result
+    assert resolve_ais_destination("BATON ROUGE>") is None
+
+
+def test_stray_separator_no_decoded_endpoints_returns_none(mock_resolver):
+    """Stray separator in free text with no decoded endpoints → None (not garbled output)."""
+    result = RouteResolution(
+        raw_destination="DOCK>3",
+        normalized_destination="DOCK>3",
+        separator=">",
+        route_type="origin_to_destination",
+        endpoints=[
+            RouteEndpoint(
+                raw="DOCK", normalized="US^DOCK", endpoint_type="us_guid",
+                guid_location=None, destination=None, confidence=0.0,
+            ),
+            RouteEndpoint(
+                raw="3", normalized="3", endpoint_type="text",
+                guid_location=None, destination=None, confidence=0.0,
+            ),
+        ],
+        confidence=0.0,
+    )
+    mock_resolver.resolve_route.return_value = result
+    assert resolve_ais_destination("DOCK>3") is None

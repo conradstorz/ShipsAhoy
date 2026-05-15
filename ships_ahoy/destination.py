@@ -60,6 +60,8 @@ def _format_route(result) -> str:
     if result.separator is not None and len(endpoints) >= 2:
         origin = _endpoint_name(endpoints[0])
         dest = _endpoint_name(endpoints[-1])
+        if not origin or not dest:
+            return ""
         return f"traveling from {origin} to {dest}"
 
     ep = endpoints[0]
@@ -95,6 +97,11 @@ def resolve_ais_destination(
         is_route = "US^" in upper or any(sep in upper for sep in (">", "<"))
         if is_route:
             result = resolver.resolve_route(raw, latitude=lat, longitude=lon)
+            if result.separator is not None and not any(
+                ep.guid_location is not None or ep.destination is not None
+                for ep in result.endpoints
+            ):
+                return None
             return _format_route(result) or None
         result = resolver.resolve(raw, latitude=lat, longitude=lon)
         if result.destination is not None:
@@ -104,22 +111,3 @@ def resolve_ais_destination(
         return None
 
 
-def resolve_destination(
-    raw: str,
-    *,
-    lat: Optional[float] = None,
-    lon: Optional[float] = None,
-) -> Optional[str]:
-    """Return the canonical destination name for a raw AIS string, or None.
-
-    Returns None when the resolver is not available, the database is missing,
-    or the best match confidence falls below the acceptance threshold.
-    The caller should fall back to title-casing the raw string in that case.
-    """
-    resolver = _get_resolver()
-    if resolver is None:
-        return None
-    result = resolver.resolve(raw, latitude=lat, longitude=lon)
-    if result.destination is not None:
-        return result.destination.canonical_name
-    return None
