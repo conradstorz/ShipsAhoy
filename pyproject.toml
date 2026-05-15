@@ -25,4 +25,4 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.uv.sources]
-ais-destination-resolver = { path = "ais_destination_resolver" }
+ais-destination-resolver = { path = "ais_destination_resolver_usguid" }

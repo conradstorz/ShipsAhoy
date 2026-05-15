@@ -5,7 +5,7 @@ requires-python = ">=3.11"
 [[package]]
 name = "ais-destination-resolver"
 version = "0.1.0"
-source = { directory = "ais_destination_resolver" }
+source = { directory = "ais_destination_resolver_usguid" }
 dependencies = [
     { name = "rapidfuzz" },
     { name = "rich" },
@@ -571,7 +571,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "ais-destination-resolver", directory = "ais_destination_resolver" },
+    { name = "ais-destination-resolver", directory = "ais_destination_resolver_usguid" },
     { name = "beautifulsoup4", specifier = ">=4.12" },
     { name = "flask", specifier = ">=3.0" },
     { name = "geonamescache", specifier = ">=1.3" },
