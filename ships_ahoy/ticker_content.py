@@ -35,7 +35,7 @@ from ships_ahoy.db import (
     get_visit_history,
 )
 from ships_ahoy.distance import bearing_to_cardinal, distance_info
-from ships_ahoy.destination import resolve_destination
+from ships_ahoy.destination import resolve_ais_destination
 from ships_ahoy.events import EventType, format_ticker_message
 from ships_ahoy.message_builder import format_ship_display
 
@@ -151,7 +151,7 @@ def _extract_facts(
         raw_dest = dest.strip()
         lat = ship_row["latitude"]
         lon = ship_row["longitude"]
-        destination = resolve_destination(raw_dest, lat=lat, lon=lon) or raw_dest.title()
+        destination = resolve_ais_destination(raw_dest, lat=lat, lon=lon) or raw_dest.title()
 
     length = enrichment_row["length_m"] if enrichment_row else None
     build_year = enrichment_row["build_year"] if enrichment_row else None
