@@ -87,6 +87,11 @@ def resolve_ais_destination(
         if resolver is None:
             return None
         upper = raw.strip().upper().replace(" ", "")
+        # Require an explicit US^ prefix or route separator to trigger GUID route
+        # resolution. Using parse_ais_route token classification would also catch
+        # bare 4-char GUIDs (e.g. "0WQB") but would misclassify plain-text port
+        # abbreviations like "NOLA" as GUIDs. The trade-off favours plain-text
+        # accuracy; bare GUIDs without US^ fall back to .title() at the call site.
         is_route = "US^" in upper or any(sep in upper for sep in (">", "<"))
         if is_route:
             result = resolver.resolve_route(raw, latitude=lat, longitude=lon)
