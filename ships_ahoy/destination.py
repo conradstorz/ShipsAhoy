@@ -18,6 +18,8 @@ Usage::
 import os
 from typing import Optional
 
+from loguru import logger
+
 _RESOLVER_DB = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "ais_destination_resolver_usguid", "data", "inland_ports.db",
@@ -37,7 +39,9 @@ def _get_resolver():
         destinations = load_destinations(_RESOLVER_DB)
         guid_locations = load_guid_locations(_RESOLVER_DB)
         _resolver = DestinationResolver(destinations, guid_locations=guid_locations)
+        logger.info("Destination resolver loaded from {}", _RESOLVER_DB)
     except Exception:
+        logger.exception("Destination resolver failed to initialize (DB: {})", _RESOLVER_DB)
         _resolver = None
     return _resolver
 
@@ -108,6 +112,7 @@ def resolve_ais_destination(
             return result.destination.canonical_name
         return None
     except Exception:
+        logger.debug("resolve_ais_destination failed for {!r}", raw, exception=True)
         return None
 
 
