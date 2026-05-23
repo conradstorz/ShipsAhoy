@@ -83,6 +83,26 @@ Then open `http://localhost:5000` in your browser.
 
 ---
 
+## Uninstalling
+
+To remove ShipsAhoy from a machine:
+
+```bash
+bash uninstall.sh
+```
+
+The script stops and removes all systemd services, then interactively prompts before removing the `rtl-ais` binary, the `uv` package manager, the dialout group membership, and the repo directory itself.
+
+| Flag | Effect |
+|------|--------|
+| *(none)* | Interactive — prompts for each optional step |
+| `--yes` | Non-interactive — removes everything automatically |
+| `--keep-repo` | Skip deletion of the repo directory (even with `--yes`) |
+
+The uninstaller reads `setup/.state` (written during installation) to know exactly what was installed and which user to clean up for. If that file is missing it falls back to safe defaults.
+
+---
+
 ## Updating
 
 After pulling new code on the Pi, re-run the service installer to apply any changes
