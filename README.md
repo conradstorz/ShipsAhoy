@@ -85,10 +85,32 @@ Then open `http://localhost:5000` in your browser.
 
 ## Uninstalling
 
-To remove ShipsAhoy from a machine:
+### On a Raspberry Pi (or any remote device)
+
+SSH into the device first, then run the uninstaller from inside the repo:
 
 ```bash
+ssh pi@<device-ip>
+cd ~/ShipsAhoy
 bash uninstall.sh
+```
+
+Not sure where the repo lives? Check:
+
+```bash
+cat ~/ShipsAhoy/setup/.state | grep REPO_DIR
+```
+
+### Non-interactive removal (no prompts)
+
+```bash
+bash uninstall.sh --yes
+```
+
+### Keep the code, remove only the services
+
+```bash
+bash uninstall.sh --keep-repo
 ```
 
 The script stops and removes all systemd services, then interactively prompts before removing the `rtl-ais` binary, the `uv` package manager, the dialout group membership, and the repo directory itself.
